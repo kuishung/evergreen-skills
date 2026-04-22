@@ -1,0 +1,19 @@
+{
+  "name": "evergreen",
+  "owner": {
+    "name": "Kui Shung",
+    "email": "kuishung@users.noreply.github.com"
+  },
+  "metadata": {
+    "description": "Internal Claude Code skills for Evergreen staff"
+  },
+  "plugins": [
+    {
+      "name": "hello-evergreen",
+      "source": "./plugins/hello-evergreen",
+      "description": "Placeholder skill that confirms the Evergreen marketplace is wired up.",
+      "version": "0.1.0",
+      "author": { "name": "Kui Shung" }
+    }
+  ]
+}

@@ -1,0 +1,6 @@
+{
+  "name": "hello-evergreen",
+  "description": "Placeholder skill that confirms the Evergreen marketplace is wired up.",
+  "version": "0.1.0",
+  "author": { "name": "Kui Shung" }
+}
