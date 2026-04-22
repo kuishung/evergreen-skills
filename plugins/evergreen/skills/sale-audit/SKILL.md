@@ -24,15 +24,17 @@ Reconcile a station's daily Fund Report against the actual proof-of-fund documen
 
 Any deposit/transfer to an account outside this list is an automatic finding.
 
-## 3. Network file server
+## 3. Network file server & output location
 
-On first run, ask the user for:
-- the **daily-report root path** (per-station, per-date folders), and
-- the **bank-statement folder path** (kept separately).
+On first run, ask the user for **three** paths and save each to memory as a `reference` memory so they are never asked again:
 
-Save both to memory as `reference` memories so you never ask again. Before reusing a remembered path, verify it still resolves; if not, ask once and update the memory.
+1. **Daily-report root path** — per-station, per-date folders containing the files in §4.
+2. **Bank-statement folder path** — kept separately from daily reports.
+3. **Audit-output folder path** — where the final PDF reports are saved. Suggested convention: `<output-root>/<station>/<YYYY-MM-DD>-sale-audit.pdf`.
 
-Expected daily layout: `<root>/<station>/<YYYY-MM-DD>/…`
+Before reusing any remembered path, verify it still resolves; if not, ask once and update the memory. If the user has not answered for a given path yet, ask for it at the start of the first audit that needs it — do not proceed without it.
+
+Expected daily layout: `<daily-report-root>/<station>/<YYYY-MM-DD>/…`
 
 ## 4. Required daily files (per station, per date)
 
@@ -104,8 +106,8 @@ Bulleted list of every flag, ordered by materiality (financial impact first, con
 ## 8. Workflow
 
 1. Confirm **station(s)** and **date** (default to yesterday if not given).
-2. Recall or ask for the network file server paths (save to memory on first run).
+2. Recall or ask for the three paths in §3 (daily-report root, bank-statement folder, audit-output folder). Save any missing ones to memory on first run.
 3. List files present vs. missing for that station+date.
 4. Run all §6 checks, preserving every intermediate calculation.
-5. Render the landscape PDF per §7.
-6. Reply in chat with the 3–5 most material findings and a link to the PDF.
+5. Render the landscape PDF per §7 and **save it to the audit-output folder** as `<station>/<YYYY-MM-DD>-sale-audit.pdf`.
+6. Reply in chat with the 3–5 most material findings and the absolute path to the saved PDF.

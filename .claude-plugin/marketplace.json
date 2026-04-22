@@ -19,7 +19,7 @@
       "name": "evergreen",
       "source": "./plugins/evergreen",
       "description": "Evergreen operational skills — daily sale audit and related back-office workflows for TK, BS, and BL petrol stations.",
-      "version": "0.1.0",
+      "version": "0.2.0",
       "author": { "name": "Kui Shung" }
     }
   ]
