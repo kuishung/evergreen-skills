@@ -1,6 +1,8 @@
 ---
 name: sale-audit
 description: Use this skill whenever the user (Evergreen back-office / management) wants to audit, verify, or check the daily sale submission of a petrol station — TK (Tg. Kapor), BS (Berkat Setia), or BL (Bubul Lama). Triggers include phrases like "audit TK", "audit sale", "check BS sale", "verify fund report", "run daily audit", "daily sale audit for <date>", or any request to reconcile a station's Fund Report against its supporting documents and produce an audit PDF.
+version: 0.3.0
+updated: 2026-04-23 20:14
 ---
 
 # Sale Audit — Evergreen Petrol Stations
@@ -30,7 +32,7 @@ On first run, ask the user for **three** paths and save each to memory as a `ref
 
 1. **Daily-report root path** — per-station, per-date folders containing the files in §4.
 2. **Bank-statement folder path** — kept separately from daily reports.
-3. **Audit-output folder path** — where the final PDF reports are saved. Suggested convention: `<output-root>/<station>/<YYYY-MM-DD>-sale-audit.pdf`.
+3. **Audit-output root** — a **single** folder shared by all stations. The skill creates the date tree inside it as `<audit-output-root>/<YYYY>/<YYYY-MM>/<YYYY-MM-DD>/` and writes every station's PDF into the same leaf folder, so the user never has to switch directories between stations. If an existing memory points to a per-station path, treat only its parent as the new root, confirm with the user once, and update the memory.
 
 Before reusing any remembered path, verify it still resolves; if not, ask once and update the memory. If the user has not answered for a given path yet, ask for it at the start of the first audit that needs it — do not proceed without it.
 
@@ -82,6 +84,31 @@ Run every check. Flag every failure.
 
 Use `anthropic-skills:pdf` to generate the report. **Landscape** orientation, graphical where it helps, short-form text in tables, and headers with strong contrast (dark-on-light or light-on-dark — never low-contrast pastels).
 
+**PDF is the only artifact.** Do not write CSV, XLSX, HTML, or intermediate files to the audit-output folder. If any scratch file is created during the run, delete it before finishing.
+
+**File path and name.** Save each station's audit as:
+
+```
+<audit-output-root>/<YYYY>/<YYYY-MM>/<YYYY-MM-DD>/<Station>-<YYYY_MM_DD>-Audit_<YYYYMMDD>_<hh>_<mm>.pdf
+```
+
+- `<Station>` — station code in caps (`TK`, `BS`, `BL`).
+- `<YYYY_MM_DD>` — the **business date** being audited (underscores).
+- `Audit_<YYYYMMDD>_<hh>_<mm>` — the moment the audit was generated, 24-hour local time.
+- Both date tree folders (`<YYYY>`, `<YYYY-MM>`, `<YYYY-MM-DD>`) refer to the business date, not the generation date.
+
+Example: `TK-2026_04_22-Audit_20260423_14_30.pdf` inside `.../2026/2026-04/2026-04-22/`.
+
+Never overwrite or delete an older file in that folder. Re-running the audit for the same business date on the same day produces a **new** file whose timestamp suffix differs, so the user can see every run side-by-side.
+
+**Footer stamp (every page, bottom-right).** In small type, print:
+
+```
+sale-audit v<version> · amended <updated> · generated <YYYY-MM-DD hh:mm>
+```
+
+Read `<version>` and `<updated>` from this file's own frontmatter (the `version` and `updated` fields at the top of `SKILL.md`). `<generated>` is the current timestamp at PDF-creation time. The stamp lets the user confirm the report came from the latest skill revision.
+
 **Section 1 — Revenue breakdown**
 - Total revenue for the date.
 - Revenue by business segment (bar or stacked bar).
@@ -106,8 +133,8 @@ Bulleted list of every flag, ordered by materiality (financial impact first, con
 ## 8. Workflow
 
 1. Confirm **station(s)** and **date** (default to yesterday if not given).
-2. Recall or ask for the three paths in §3 (daily-report root, bank-statement folder, audit-output folder). Save any missing ones to memory on first run.
+2. Recall or ask for the three paths in §3 (daily-report root, bank-statement folder, audit-output root). Save any missing ones to memory on first run.
 3. List files present vs. missing for that station+date.
 4. Run all §6 checks, preserving every intermediate calculation.
-5. Render the landscape PDF per §7 and **save it to the audit-output folder** as `<station>/<YYYY-MM-DD>-sale-audit.pdf`.
+5. Render the landscape PDF per §7. Create `<audit-output-root>/<YYYY>/<YYYY-MM>/<YYYY-MM-DD>/` if it does not exist (business-date tree, shared by all stations), then save as `<Station>-<YYYY_MM_DD>-Audit_<YYYYMMDD>_<hh>_<mm>.pdf`. Produce no other files.
 6. Reply in chat with the 3–5 most material findings and the absolute path to the saved PDF.
