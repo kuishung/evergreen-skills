@@ -1,8 +1,8 @@
 ---
 name: sale-audit
 description: Use this skill whenever the user (Evergreen back-office / management) wants to audit, verify, or check the daily sale submission of a petrol station — TK (Tg. Kapor), BS (Berkat Setia), or BL (Bubul Lama). Triggers include phrases like "audit TK", "audit sale", "check BS sale", "verify fund report", "run daily audit", "daily sale audit for <date>", or any request to reconcile a station's Fund Report against its supporting documents and produce an audit PDF.
-version: 0.3.0
-updated: 2026-04-23 20:14
+version: 0.4.0
+updated: 2026-04-23 21:04
 ---
 
 # Sale Audit — Evergreen Petrol Stations
@@ -84,30 +84,44 @@ Run every check. Flag every failure.
 
 Use `anthropic-skills:pdf` to generate the report. **Landscape** orientation, graphical where it helps, short-form text in tables, and headers with strong contrast (dark-on-light or light-on-dark — never low-contrast pastels).
 
-**PDF is the only artifact.** Do not write CSV, XLSX, HTML, or intermediate files to the audit-output folder. If any scratch file is created during the run, delete it before finishing.
+**PDFs are the only artifacts.** Do not write CSV, XLSX, HTML, or intermediate files to the audit-output folder. If any scratch file is created during the run, delete it before finishing.
+
+**Two language versions per run.** Every audit produces **two** PDFs — one English (`_EN`) and one Simplified Chinese (`_CH`). Same layout, same data, same charts, same footer stamp; only the language differs. Render both from the same computed figures so they cannot disagree. The PDF engine must use a font that covers CJK glyphs (e.g., Noto Sans CJK SC / Noto Serif CJK SC) — if the font is missing, fail loudly rather than silently output boxes.
 
 **File path and name.** Save each station's audit as:
 
 ```
-<audit-output-root>/<YYYY>/<YYYY-MM>/<YYYY-MM-DD>/<Station>-<YYYY_MM_DD>-Audit_<YYYYMMDD>_<hh>_<mm>.pdf
+<audit-output-root>/<YYYY>/<YYYY-MM>/<YYYY-MM-DD>/<Station>-<YYYY_MM_DD>-Audit_<YYYYMMDD>_<hh>_<mm>_<Lang>.pdf
 ```
 
 - `<Station>` — station code in caps (`TK`, `BS`, `BL`).
 - `<YYYY_MM_DD>` — the **business date** being audited (underscores).
 - `Audit_<YYYYMMDD>_<hh>_<mm>` — the moment the audit was generated, 24-hour local time.
+- `<Lang>` — `EN` for English, `CH` for Simplified Chinese. Always produce both in the same run.
 - Both date tree folders (`<YYYY>`, `<YYYY-MM>`, `<YYYY-MM-DD>`) refer to the business date, not the generation date.
 
-Example: `TK-2026_04_22-Audit_20260423_14_30.pdf` inside `.../2026/2026-04/2026-04-22/`.
+Example, one run producing two files inside `.../2026/2026-04/2026-04-22/`:
 
-Never overwrite or delete an older file in that folder. Re-running the audit for the same business date on the same day produces a **new** file whose timestamp suffix differs, so the user can see every run side-by-side.
+- `TK-2026_04_22-Audit_20260423_14_30_EN.pdf`
+- `TK-2026_04_22-Audit_20260423_14_30_CH.pdf`
 
-**Footer stamp (every page, bottom-right).** In small type, print:
+Never overwrite or delete an older file in that folder. Re-running the audit for the same business date on the same day produces a **new** pair whose timestamp suffix differs, so the user can see every run side-by-side.
 
-```
-sale-audit v<version> · amended <updated> · generated <YYYY-MM-DD hh:mm>
-```
+**Footer stamp (every page, bottom-right).** Print one of the following, depending on the PDF's language:
+
+- English: `sale-audit v<version> · amended <updated> · generated <YYYY-MM-DD hh:mm>`
+- Chinese: `sale-audit v<version> · 修订 <updated> · 生成 <YYYY-MM-DD hh:mm>`
 
 Read `<version>` and `<updated>` from this file's own frontmatter (the `version` and `updated` fields at the top of `SKILL.md`). `<generated>` is the current timestamp at PDF-creation time. The stamp lets the user confirm the report came from the latest skill revision.
+
+**Footer positioning — strict.** The stamp must sit in the **bottom page margin**, clearly below every report element. Never let it overlap a table row, chart, page number, or any body line.
+
+- Vertical position: baseline at **~8 mm from the bottom edge** of the page (well below the content area).
+- Horizontal position: right-aligned to the content's right margin.
+- Minimum clearance: at least **10 mm of empty space** between the last content line and the top of the stamp text.
+- Size and weight: small (~7–8 pt), regular weight, muted colour (mid-grey, not black) so it does not compete with the report.
+- Implementation: render the stamp as a true page-footer region (separate from the content flow), not as a trailing paragraph inside the report body — otherwise it drifts up into content on short pages.
+- If a page lays out in a way that would push content into the footer zone, **reflow the content to a new page** rather than shrink the bottom margin. Content and stamp must never collide.
 
 **Section 1 — Revenue breakdown**
 - Total revenue for the date.
@@ -136,5 +150,5 @@ Bulleted list of every flag, ordered by materiality (financial impact first, con
 2. Recall or ask for the three paths in §3 (daily-report root, bank-statement folder, audit-output root). Save any missing ones to memory on first run.
 3. List files present vs. missing for that station+date.
 4. Run all §6 checks, preserving every intermediate calculation.
-5. Render the landscape PDF per §7. Create `<audit-output-root>/<YYYY>/<YYYY-MM>/<YYYY-MM-DD>/` if it does not exist (business-date tree, shared by all stations), then save as `<Station>-<YYYY_MM_DD>-Audit_<YYYYMMDD>_<hh>_<mm>.pdf`. Produce no other files.
-6. Reply in chat with the 3–5 most material findings and the absolute path to the saved PDF.
+5. Render **two** landscape PDFs per §7 — English and Simplified Chinese — from the same computed figures. Create `<audit-output-root>/<YYYY>/<YYYY-MM>/<YYYY-MM-DD>/` if it does not exist (business-date tree, shared by all stations), then save both as `<Station>-<YYYY_MM_DD>-Audit_<YYYYMMDD>_<hh>_<mm>_EN.pdf` and `…_CH.pdf`. Produce no other files.
+6. Reply in chat with the 3–5 most material findings and the absolute paths to both saved PDFs.
