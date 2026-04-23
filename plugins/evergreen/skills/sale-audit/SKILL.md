@@ -1,8 +1,8 @@
 ---
 name: sale-audit
 description: Use this skill whenever the user (Evergreen back-office / management) wants to audit, verify, or check the daily sale submission of a petrol station — TK (Tg. Kapor), BS (Berkat Setia), or BL (Bubul Lama). Triggers include phrases like "audit TK", "audit sale", "check BS sale", "verify fund report", "run daily audit", "daily sale audit for <date>", or any request to reconcile a station's Fund Report against its supporting documents and produce an audit PDF.
-version: 0.4.0
-updated: 2026-04-23 21:04
+version: 0.5.0
+updated: 2026-04-24 06:10
 ---
 
 # Sale Audit — Evergreen Petrol Stations
@@ -79,6 +79,7 @@ Run every check. Flag every failure.
 9. **CFP vs. GreenPOS voucher.** Total CFP report must tally with the GreenPOS voucher line.
 10. **Fuel quantity.** Opening fuel + deliveries − sales = closing fuel. Reconcile against the fuel quantity records and delivery orders, per product.
 11. **Funds cleared.** Cross-check the bank-statement folder to confirm the day's deposits/transfers actually cleared into the listed accounts.
+12. **Fund Report aggregation integrity.** Staff sometimes sum several slips into a single Fund Report line (e.g., three cash-deposit slips reported as one "Cash deposits RMx" figure). For every Fund Report entry that aggregates more than one underlying slip, the sum of the underlying slips must equal the Fund Report line — flag any variance. Every individual slip must also appear somewhere in the Fund Report, either as its own line or as part of an aggregated line; any slip missing from the Fund Report entirely is an automatic finding (understatement). Audit always from the slips, never let the Fund Report's aggregated view suppress an individual row in the proof-of-fund table (see §7 Section 2).
 
 ## 7. Output — landscape PDF
 
@@ -114,26 +115,35 @@ Never overwrite or delete an older file in that folder. Re-running the audit for
 
 Read `<version>` and `<updated>` from this file's own frontmatter (the `version` and `updated` fields at the top of `SKILL.md`). `<generated>` is the current timestamp at PDF-creation time. The stamp lets the user confirm the report came from the latest skill revision.
 
-**Footer positioning — strict.** The stamp must sit in the **bottom page margin**, clearly below every report element. Never let it overlap a table row, chart, page number, or any body line.
+**Footer positioning — strict.** The stamp must appear on **every page** of **both** the English and Chinese PDFs, in the bottom margin, clearly below every report element. Never let it overlap a table row, chart, page number, or any body line.
 
-- Vertical position: baseline at **~8 mm from the bottom edge** of the page (well below the content area).
+- Vertical position: baseline **60 mm (6 cm) from the bottom edge** of the page. Measured to the text baseline, not the top of the line.
 - Horizontal position: right-aligned to the content's right margin.
 - Minimum clearance: at least **10 mm of empty space** between the last content line and the top of the stamp text.
 - Size and weight: small (~7–8 pt), regular weight, muted colour (mid-grey, not black) so it does not compete with the report.
-- Implementation: render the stamp as a true page-footer region (separate from the content flow), not as a trailing paragraph inside the report body — otherwise it drifts up into content on short pages.
-- If a page lays out in a way that would push content into the footer zone, **reflow the content to a new page** rather than shrink the bottom margin. Content and stamp must never collide.
+- Implementation: render the stamp as a true page-footer region (separate from the content flow), not as a trailing paragraph inside the report body — otherwise it drifts up into content on short pages. Applying the footer via the PDF engine's page-footer / running-footer API is preferred over manual positioning so the 60 mm anchor is consistent across pages.
+- The content area must end at least 70 mm from the bottom edge (60 mm for the footer baseline + 10 mm clearance). If a page lays out in a way that would push content into that zone, **reflow the content to a new page** rather than shrink the bottom margin. Content and stamp must never collide.
+- Both language PDFs use the same 60 mm anchor — positioning is identical; only the text content differs (English vs Chinese).
 
 **Section 1 — Revenue breakdown**
 - Total revenue for the date.
 - Revenue by business segment (bar or stacked bar).
-- Revenue by channel (cash / merchant / CFP / BUDI95) as a **pie chart**.
+- Revenue by channel (cash / merchant / CFP / BUDI95), shown **two ways**:
+  - A **pie chart** for proportions.
+  - A **channel totals table** with the actual figures, computed from the proof-of-fund slips (not from the Fund Report). Columns: `Channel | Total (RM) | # of slips | % of revenue`. Add a `Total` row. Example row: `Cash | 12,345.67 | 3 | 45%`.
 
 **Section 2 — Proof-of-fund audit table**
-One row per document. Use short-form column headers:
 
-| Doc | Type | Amt (RM) | Date✓ | Uniq✓ | Acct✓ | POS✓ | Cleared✓ | Notes |
+**One row per individual slip**, regardless of whether the Fund Report lists that slip individually or rolls several slips into a single aggregated line. Never collapse slips in this table even when the Fund Report collapsed them — this table exists to show the underlying evidence. Use short-form column headers:
 
-Tick / cross per criterion; one-line note on failures.
+| Doc | Type | Amt (RM) | Date✓ | Uniq✓ | Acct✓ | POS✓ | Cleared✓ | In FR | Notes |
+
+`In FR` column values:
+- `✓` — slip appears as its own line in the Fund Report.
+- `∑` — slip is part of an aggregated Fund Report line (multiple slips summed into one entry). Note which FR line it rolls into.
+- `✗` — slip is **not represented** in the Fund Report at all (understatement — automatic finding per §6 rule 12).
+
+Tick / cross per other criterion; one-line note on failures. Immediately below the table, add a small "FR aggregation check" sub-table: for every Fund Report entry that aggregates multiple slips, show the FR line amount vs. the sum of the underlying slips and flag any variance.
 
 **Section 3 — Cash highlight**
 Opening cash, closing cash (Fund Report vs. calculated), variance. Highlight any mismatch in red.
