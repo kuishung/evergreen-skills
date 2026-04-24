@@ -1,8 +1,8 @@
 ---
 name: sale-audit
 description: Use this skill whenever the user (Evergreen back-office / management) wants to audit, verify, or check the daily sale submission of a petrol station — TK (Tg. Kapor), BS (Berkat Setia), or BL (Bubul Lama). Triggers include phrases like "audit TK", "audit sale", "check BS sale", "verify fund report", "run daily audit", "daily sale audit for <date>", or any request to reconcile a station's Fund Report against its supporting documents and produce an audit PDF.
-version: 0.5.0
-updated: 2026-04-24 06:10
+version: 0.6.0
+updated: 2026-04-24 08:27
 ---
 
 # Sale Audit — Evergreen Petrol Stations
@@ -55,14 +55,24 @@ Expected daily layout: `<daily-report-root>/<station>/<YYYY-MM-DD>/…`
 
 **First audit step:** enumerate present vs. missing files. Every missing file is a finding.
 
-## 5. Revenue channels
+## 5. Inflow categories — Revenue vs. CFP Deposit
 
-| Channel   | How it is proven                                                                 |
-|-----------|----------------------------------------------------------------------------------|
-| Cash      | Cash deposit machine receipt                                                     |
-| Merchant  | Debit/credit card terminal settlement report                                     |
-| CFP       | Voucher used = revenue. CFP top-ups are **deposits, not revenue**.               |
-| BUDI95    | Customer pays part; balance claimed from gov't via principal supplier IPTB.      |
+Not every amount received is revenue. Split the day's inflow into two disjoint groups and **never mix them**.
+
+### 5.1 Revenue channels (recognised as revenue)
+
+| Channel             | How it is proven                                                                                                                            |
+|---------------------|---------------------------------------------------------------------------------------------------------------------------------------------|
+| Cash                | Cash deposit machine receipt                                                                                                                |
+| Merchant            | Debit/credit card terminal settlement report                                                                                                |
+| CFP voucher used    | CFP report line showing redemption of a customer's pre-paid CFP balance against fuel sold (consumption of the balance — this is the sale). |
+| BUDI95              | Subsidised RON95. Customer pays part at the pump; the balance is a **receivable claimed back from the government** via the principal supplier (IPTB). Count the full pump price in revenue; the claimable portion becomes a receivable, not a fund received today. Appears on GreenPOS as a BUDI95 tender. |
+
+### 5.2 Non-revenue inflow
+
+| Category     | How it is proven                                                                                                                              |
+|--------------|-----------------------------------------------------------------------------------------------------------------------------------------------|
+| CFP Deposit  | CFP top-up entries on the CFP report — the customer paid cash/card to **add balance to their CFP account** for future use. This is a customer-deposit liability on our books, **never revenue**. Must be reported separately in the PDF (see §7 Section 1). |
 
 ## 6. Audit rules — strict, non-negotiable
 
@@ -76,7 +86,7 @@ Run every check. Flag every failure.
 6. **Correct account.** Deposits must land in one of the six bank accounts in §2.
 7. **POS tally.** GreenPOS, Autocount POS, and iBing FeedMePOS totals (system-generated → source of truth) must match the Fund Report totals.
 8. **Channel tally.** Per-channel revenue in proof-of-fund must match the per-channel split in the POS systems.
-9. **CFP vs. GreenPOS voucher.** Total CFP report must tally with the GreenPOS voucher line.
+9. **CFP vs. GreenPOS voucher.** Sum of the CFP report's **voucher-usage lines only** (redemptions against pre-paid balance) must tally with the GreenPOS voucher line. CFP top-ups are deposits (§5.2) and are **excluded** from this tally — if a day's "CFP total" matches only when top-ups are included, someone has mis-classified a deposit as revenue.
 10. **Fuel quantity.** Opening fuel + deliveries − sales = closing fuel. Reconcile against the fuel quantity records and delivery orders, per product.
 11. **Funds cleared.** Cross-check the bank-statement folder to confirm the day's deposits/transfers actually cleared into the listed accounts.
 12. **Fund Report aggregation integrity.** Staff sometimes sum several slips into a single Fund Report line (e.g., three cash-deposit slips reported as one "Cash deposits RMx" figure). For every Fund Report entry that aggregates more than one underlying slip, the sum of the underlying slips must equal the Fund Report line — flag any variance. Every individual slip must also appear somewhere in the Fund Report, either as its own line or as part of an aggregated line; any slip missing from the Fund Report entirely is an automatic finding (understatement). Audit always from the slips, never let the Fund Report's aggregated view suppress an individual row in the proof-of-fund table (see §7 Section 2).
@@ -115,22 +125,31 @@ Never overwrite or delete an older file in that folder. Re-running the audit for
 
 Read `<version>` and `<updated>` from this file's own frontmatter (the `version` and `updated` fields at the top of `SKILL.md`). `<generated>` is the current timestamp at PDF-creation time. The stamp lets the user confirm the report came from the latest skill revision.
 
-**Footer positioning — strict.** The stamp must appear on **every page** of **both** the English and Chinese PDFs, in the bottom margin, clearly below every report element. Never let it overlap a table row, chart, page number, or any body line.
+**Footer positioning — strict.** The stamp must appear on **every page** of **both** the English and Chinese PDFs, tucked into a thin bottom strip, clearly below every report element. Never let it overlap a table row, chart, page number, or any body line. The bottom reserve is deliberately small (~20 mm) so the report does not leave a large empty strip at the foot of each page.
 
-- Vertical position: baseline **60 mm (6 cm) from the bottom edge** of the page. Measured to the text baseline, not the top of the line.
+- Vertical position: baseline **6 mm from the bottom edge** of the page. Measured to the text baseline, not the top of the line.
 - Horizontal position: right-aligned to the content's right margin.
 - Minimum clearance: at least **10 mm of empty space** between the last content line and the top of the stamp text.
 - Size and weight: small (~7–8 pt), regular weight, muted colour (mid-grey, not black) so it does not compete with the report.
-- Implementation: render the stamp as a true page-footer region (separate from the content flow), not as a trailing paragraph inside the report body — otherwise it drifts up into content on short pages. Applying the footer via the PDF engine's page-footer / running-footer API is preferred over manual positioning so the 60 mm anchor is consistent across pages.
-- The content area must end at least 70 mm from the bottom edge (60 mm for the footer baseline + 10 mm clearance). If a page lays out in a way that would push content into that zone, **reflow the content to a new page** rather than shrink the bottom margin. Content and stamp must never collide.
-- Both language PDFs use the same 60 mm anchor — positioning is identical; only the text content differs (English vs Chinese).
+- Implementation: render the stamp as a true page-footer region (separate from the content flow), not as a trailing paragraph inside the report body — otherwise it drifts up into content on short pages. Applying the footer via the PDF engine's page-footer / running-footer API is preferred over manual positioning so the 6 mm anchor is consistent across pages.
+- The content area must end at least ~20 mm from the bottom edge (6 mm for the footer baseline + stamp line height + 10 mm clearance). If a page lays out in a way that would push content into that zone, **reflow the content to a new page** rather than shrink the bottom margin. Content and stamp must never collide. Do not reserve more than ~20 mm at the bottom — a larger reserve leaves a big empty strip on every page.
+- Both language PDFs use the same 6 mm anchor — positioning is identical; only the text content differs (English vs Chinese).
 
-**Section 1 — Revenue breakdown**
-- Total revenue for the date.
+**Section 1 — Inflow breakdown**
+
+Lead with the headline: **Total Inflow = Revenue + CFP Deposit**. Show the single headline number, then split into two clearly separated subsections. The word "Revenue" must never include CFP Deposit; if the Fund Report lumps them together, unpick them here.
+
+**Revenue** (Cash + Merchant + CFP voucher used + BUDI95, per §5.1):
+- Revenue total for the date.
 - Revenue by business segment (bar or stacked bar).
-- Revenue by channel (cash / merchant / CFP / BUDI95), shown **two ways**:
+- Revenue by channel, shown **two ways**:
   - A **pie chart** for proportions.
-  - A **channel totals table** with the actual figures, computed from the proof-of-fund slips (not from the Fund Report). Columns: `Channel | Total (RM) | # of slips | % of revenue`. Add a `Total` row. Example row: `Cash | 12,345.67 | 3 | 45%`.
+  - A **channel totals table** with the actual figures, computed from the proof-of-fund slips (not from the Fund Report). Columns: `Channel | Total (RM) | # of slips | % of revenue`. Add a `Total` row. All four channels (Cash, Merchant, CFP voucher used, BUDI95) must appear even if zero for the day. For BUDI95, note in the row what portion is the customer's cash/card payment vs. the receivable claimed from the government via IPTB.
+
+**CFP Deposit** (non-revenue inflow, per §5.2):
+- CFP deposit total for the day (sum of all CFP top-up entries on the CFP report).
+- Count of top-up transactions.
+- Render in a **visually distinct callout** (a different panel colour or a boxed frame, with the label "CFP Deposit — not revenue") so it is impossible to confuse with the Revenue block.
 
 **Section 2 — Proof-of-fund audit table**
 
