@@ -1,8 +1,8 @@
 ---
 name: sale-audit
 description: Use this skill whenever the user (Evergreen back-office / management) wants to audit, verify, or check the daily sale submission of a petrol station — TK (Tg. Kapor), BS (Berkat Setia), or BL (Bubul Lama). Triggers include phrases like "audit TK", "audit sale", "check BS sale", "verify fund report", "run daily audit", "daily sale audit for <date>", or any request to reconcile a station's Fund Report against its supporting documents and produce an audit PDF.
-version: 0.6.0
-updated: 2026-04-24 08:27
+version: 0.7.0
+updated: 2026-04-25 21:58
 ---
 
 # Sale Audit — Evergreen Petrol Stations
@@ -31,7 +31,7 @@ Any deposit/transfer to an account outside this list is an automatic finding.
 On first run, ask the user for **three** paths and save each to memory as a `reference` memory so they are never asked again:
 
 1. **Daily-report root path** — per-station, per-date folders containing the files in §4.
-2. **Bank-statement folder path** — kept separately from daily reports.
+2. **Bank-statement folder path** — kept separately from daily reports. Holds internet-banking screen-printouts whose date ranges overlap (see §6 rule 11 for how the skill pools and dedupes them).
 3. **Audit-output root** — a **single** folder shared by all stations. The skill creates the date tree inside it as `<audit-output-root>/<YYYY>/<YYYY-MM>/<YYYY-MM-DD>/` and writes every station's PDF into the same leaf folder, so the user never has to switch directories between stations. If an existing memory points to a per-station path, treat only its parent as the new root, confirm with the user once, and update the memory.
 
 Before reusing any remembered path, verify it still resolves; if not, ask once and update the memory. If the user has not answered for a given path yet, ask for it at the start of the first audit that needs it — do not proceed without it.
@@ -88,7 +88,14 @@ Run every check. Flag every failure.
 8. **Channel tally.** Per-channel revenue in proof-of-fund must match the per-channel split in the POS systems.
 9. **CFP vs. GreenPOS voucher.** Sum of the CFP report's **voucher-usage lines only** (redemptions against pre-paid balance) must tally with the GreenPOS voucher line. CFP top-ups are deposits (§5.2) and are **excluded** from this tally — if a day's "CFP total" matches only when top-ups are included, someone has mis-classified a deposit as revenue.
 10. **Fuel quantity.** Opening fuel + deliveries − sales = closing fuel. Reconcile against the fuel quantity records and delivery orders, per product.
-11. **Funds cleared.** Cross-check the bank-statement folder to confirm the day's deposits/transfers actually cleared into the listed accounts.
+11. **Funds cleared.** The bank-statement folder (§3 item 2) holds **screen-printouts of internet-banking history**, not daily statements. Each printout covers an arbitrary date range chosen by staff, so adjacent printouts **overlap** — yesterday's transactions almost always reappear inside today's printout, and the same transaction can appear in two or more files. Verify clearance accordingly:
+
+    1. Read **every** file in the bank-statement folder — never assume "one printout per day". Treat the folder as a single pooled transaction history.
+    2. Extract all credit transactions across every file and **dedupe** them by the tuple `(account, value date, amount, transaction reference / narrative)`. A duplicate is the same transaction printed twice; count it once.
+    3. From the deduped pool, select credits whose **value date** equals the audit date (and whose destination account is one of the six listed in §2). For cheque-funded slips, also accept value dates of audit-date + 1 to +3 working days, since cheques typically clear later — flag the slip as "cleared on T+n" rather than "missing".
+    4. Match each proof-of-fund slip to one bank credit on `(account, amount, value date, reference/narrative)`. A successful match sets the slip's `Cleared✓` column to `✓`; otherwise `✗` with a one-line reason (e.g., "no matching credit", "amount mismatch RM x vs RM y", "wrong account").
+    5. Conversely, any bank credit on the audit date that **cannot** be matched to a proof-of-fund slip is an **unexplained credit** — flag it as a finding (potential undeclared revenue or misposted transfer).
+    6. If a printout's date range does not include the audit date at all (e.g., staff forgot to refresh the screen before printing), skip that file silently — but the run as a whole must still find at least one printout whose range covers the audit date, otherwise raise a finding "bank-statement coverage missing for <audit date>".
 12. **Fund Report aggregation integrity.** Staff sometimes sum several slips into a single Fund Report line (e.g., three cash-deposit slips reported as one "Cash deposits RMx" figure). For every Fund Report entry that aggregates more than one underlying slip, the sum of the underlying slips must equal the Fund Report line — flag any variance. Every individual slip must also appear somewhere in the Fund Report, either as its own line or as part of an aggregated line; any slip missing from the Fund Report entirely is an automatic finding (understatement). Audit always from the slips, never let the Fund Report's aggregated view suppress an individual row in the proof-of-fund table (see §7 Section 2).
 
 ## 7. Output — landscape PDF
