@@ -1,8 +1,8 @@
 ---
 name: sale-audit
 description: Use this skill whenever the user (Evergreen back-office / management) wants to audit, verify, or check the daily sale submission of a petrol station — TK (Tg. Kapor), BS (Berkat Setia), or BL (Bubul Lama). Triggers include phrases like "audit TK", "audit sale", "check BS sale", "verify fund report", "run daily audit", "daily sale audit for <date>", or any request to reconcile a station's Fund Report against its supporting documents and produce an audit PDF.
-version: 0.7.0
-updated: 2026-04-25 21:58
+version: 0.8.0
+updated: 2026-04-25 22:15
 ---
 
 # Sale Audit — Evergreen Petrol Stations
@@ -142,43 +142,155 @@ Read `<version>` and `<updated>` from this file's own frontmatter (the `version`
 - The content area must end at least ~20 mm from the bottom edge (6 mm for the footer baseline + stamp line height + 10 mm clearance). If a page lays out in a way that would push content into that zone, **reflow the content to a new page** rather than shrink the bottom margin. Content and stamp must never collide. Do not reserve more than ~20 mm at the bottom — a larger reserve leaves a big empty strip on every page.
 - Both language PDFs use the same 6 mm anchor — positioning is identical; only the text content differs (English vs Chinese).
 
+### 7.1 Visual template — match this design exactly
+
+Every audit PDF must follow the same visual grammar so any Evergreen reviewer can read any audit at a glance. **Reference layout: the BL audit generated at `2026-04-24 23:59` (`BL-2026_04_23-Audit_20260424_23_59_EN.pdf`).** The user has confirmed that PDF as the canonical template. Match its structure — page anatomy, multi-column splits, palette, typography, and decoration — on every future run, EN and CH alike.
+
+**Page setup**
+- A4 landscape (297 × 210 mm).
+- Margins: ~8 mm left, ~8 mm right, ~6 mm top, ~20 mm bottom reserve (footer stamp baseline at 6 mm + line height + 10 mm clearance, per the rules above).
+- Background: very pale cream / warm off-white (`#F8F4E8` or near-equivalent).
+
+**Color palette** — use these consistently:
+
+| Use                                          | Hex (or near-equivalent) |
+|----------------------------------------------|--------------------------|
+| Primary brand band; dark accent panels       | `#0E5D3F` deep forest green |
+| Section header band background               | `#BFDFC8` light pastel green |
+| Warning / "not revenue" callout background   | `#FFF3CC` soft yellow |
+| Warning / "not revenue" callout border       | `#E0A030` amber |
+| Variance / negative figure                   | `#D72E2E` red |
+| Footer stamp text                            | `#7A7A7A` mid-grey |
+| Body text                                    | `#1A1A1A` near-black |
+| Muted text / captions                        | `#5A5A5A` charcoal |
+| Pie slice — Cash                             | `#D9A23B` mustard |
+| Pie slice — Merchant                         | `#9CB6A6` sage |
+| Pie slice — CFP voucher used                 | `#264E3F` deep teal-green |
+| Pie slice — BUDI95                           | `#B65A28` burnt orange |
+
+**Typography**
+- Sans-serif throughout. EN: system Inter / Helvetica / Arial fallback. CH: Noto Sans CJK SC.
+- Headline panel numbers: bold, ~24–28 pt.
+- Section header band text: bold, ~11–12 pt; near-black on light green, **or** white on dark green.
+- Table column headers: bold, ~10 pt, white on dark green (`#0E5D3F`).
+- Body / table cells: regular, ~9–10 pt.
+- Footer stamp: regular, ~7–8 pt, mid-grey (per the rules above).
+
+**Element styles**
+- **Section header bands** — full-width strip ~7–8 mm tall, light-green background, bold dark text aligned ~8 mm from the left edge. Every section starts with one.
+- **Cards** — 1 px solid border in dark green, ~5–6 mm internal padding, white card background. Optional header row in dark green with white text (e.g., "Revenue — RM xx,xxx.xx").
+- **Tables** — dark-green header row with white text; body rows alternating white / very-faint-green; bold "Total" row at the bottom; right-align all numeric columns; ~9–10 pt body.
+- **Headline panel** — full-width dark-green band; three big white callout numbers separated by `=` and `+` glyphs, with small white captions above each amount.
+- **Alert card** — amber border + soft-yellow fill + leading ⚠ icon. Used **only** for the CFP Deposit block and other "not revenue / pending" notices (e.g., the deferred-clearance strip in Section 2).
+- **Pie chart** — flat 2D pie (not donut); legend on the right showing channel name + percent.
+- **Inline share bars** — thin coloured bars rendered inside a table cell, width = share %; used in the segment table of Section 1.
+
+**Multi-column layout map**
+
+| Block                                                         | Width split |
+|---------------------------------------------------------------|-------------|
+| Top title band + meta strip                                   | Full width  |
+| Section 1 headline panel                                      | Full width  |
+| Section 1: Revenue card  /  CFP Deposit alert card            | ~65% / ~35% |
+| Section 1: Channel-totals table  /  By-channel pie chart      | ~70% / ~30% |
+| Section 2 (proof-of-fund table + FR aggregation sub-table)    | Full width  |
+| Section 3 Cash highlight  /  Section 4 Fuel quantity          | ~50% / ~50% |
+| Section 4b POS tally                                          | Right ~50%, beneath Section 4 |
+| Section 5 §4 checklist                                        | Full width  |
+| Section 6 Findings & recommendations                          | Full width  |
+
+### 7.2 Top-of-page header
+
+**Title band** — full width, dark-green (`#0E5D3F`) background, ~12–14 mm tall, white bold text. Format:
+
+- English: `<STATION-NAME> (<CODE>) — DAILY SALE AUDIT · <YYYY-MM-DD>`
+- Chinese: `<中文站名> (<CODE>) — 每日销售审计 · <YYYY-MM-DD>`
+
+(For example: `BUBUL LAMA (BL) — DAILY SALE AUDIT · 2026-04-23`.)
+
+**Meta strip** — immediately below the title band, light-grey background, ~7–8 mm tall, with bold labels and regular-weight values, separated by ample whitespace. Fields, in order:
+
+| Order | Label (EN)     | Label (CH)  | Value                                                                                 |
+|-------|----------------|-------------|---------------------------------------------------------------------------------------|
+| 1     | Station        | 站           | Station code (`TK` / `BS` / `BL`)                                                     |
+| 2     | Business date  | 业务日期     | Audited date, `YYYY-MM-DD`                                                            |
+| 3     | Prepared by    | 制作人       | Person on shift / Fund Report submitter, if known; `—` if unknown                     |
+| 4     | Bank stmts     | 银行对账单   | Folder status: `configured (N files)`, `configured (empty)`, or `not configured`      |
+
 **Section 1 — Inflow breakdown**
 
-Lead with the headline: **Total Inflow = Revenue + CFP Deposit**. Show the single headline number, then split into two clearly separated subsections. The word "Revenue" must never include CFP Deposit; if the Fund Report lumps them together, unpick them here.
+Layout:
 
-**Revenue** (Cash + Merchant + CFP voucher used + BUDI95, per §5.1):
-- Revenue total for the date.
-- Revenue by business segment (bar or stacked bar).
-- Revenue by channel, shown **two ways**:
-  - A **pie chart** for proportions.
-  - A **channel totals table** with the actual figures, computed from the proof-of-fund slips (not from the Fund Report). Columns: `Channel | Total (RM) | # of slips | % of revenue`. Add a `Total` row. All four channels (Cash, Merchant, CFP voucher used, BUDI95) must appear even if zero for the day. For BUDI95, note in the row what portion is the customer's cash/card payment vs. the receivable claimed from the government via IPTB.
+1. **Headline panel** (full-width dark-green band, white text), three columns side-by-side:
+   - "Total Inflow"  →  large bold figure (e.g., `RM 68,243.21`)
+   - "= Revenue"     →  large bold figure
+   - "+ CFP Deposit (non-revenue)"  →  large bold figure
 
-**CFP Deposit** (non-revenue inflow, per §5.2):
-- CFP deposit total for the day (sum of all CFP top-up entries on the CFP report).
-- Count of top-up transactions.
-- Render in a **visually distinct callout** (a different panel colour or a boxed frame, with the label "CFP Deposit — not revenue") so it is impossible to confuse with the Revenue block.
+   One small caption beneath the panel: `Total Inflow = Revenue + CFP Deposit (non-revenue)`.
 
-**Section 2 — Proof-of-fund audit table**
+2. **Revenue card** (left ~65 %), dark-green border, header row "Revenue — RM <total>". Inside:
+   - Segment table — columns `Segment | RM | Share`. Rows: `Fuel`, `Buraqmart`, `Rental / iBing` (or station-equivalent), bold `Total` row at the bottom. The `Share` column renders an inline horizontal bar whose width equals the segment's share percentage, with the percentage label.
+   - One italic footer line, ~9 pt, summarising fuel volume × price (e.g., `Petrol 9,840.43 L × RM 3.87; Diesel 2,946.30 L × RM 2.15.`) plus, on its own clause, the BUDI95 claimable amount (e.g., `BUDI95 claimable RM 11,552.40.`). If a fuel delivery occurred, append `Fuel delivery today.`
 
-**One row per individual slip**, regardless of whether the Fund Report lists that slip individually or rolls several slips into a single aggregated line. Never collapse slips in this table even when the Fund Report collapsed them — this table exists to show the underlying evidence. Use short-form column headers:
+3. **CFP Deposit alert card** (right ~35 %), amber border + soft-yellow fill + ⚠ icon. Header `CFP Deposit — not revenue`. Inside:
+   - Big bold amount (e.g., `RM 23,724.00`).
+   - One-line caption (e.g., `All cash — zero bank transfer to PetrolFox today.`).
+   - Sub-table — columns `Sub | Amt | #`. Rows: `Cash top-up`, `Bank transfer top-up`, bold `Total` row.
+
+4. **Revenue — channel totals from slips** (left ~70 %, below the two cards). Table with columns `Channel | RM | # slips | % | Notes`. Rows: `Cash`, `Merchant`, `CFP voucher used`, `BUDI95 (full pump price)`, bold `Total` row. The four channels must always appear even if zero for the day. The Notes column carries one short clarification per channel — for BUDI95, split customer-paid portion vs. IPTB-claimable portion.
+
+5. **By channel pie chart** (right ~30 %, beside the channel-totals table). Flat 2D pie, four slices in the palette colours above, legend on the right showing channel name + percent.
+
+**Section 2 — Proof-of-fund**
+
+Section header band: `Section 2 — Proof-of-fund (<N> slips · <aggregation note>)` — e.g., `(23 slips · all individual, no aggregation)`.
+
+If clearance verification is deferred (e.g., bank-statement coverage missing per §6 rule 11), insert an amber/yellow alert strip immediately under the header summarising why the `Cleared✓` column is blank and citing `§6.11 deferred`.
+
+Optional one-paragraph note then summarises recurring Fund-Report exceptions (e.g., persistent doc-number bugs) and confirms the §6.12 aggregation status.
+
+Then the **proof-of-fund table**, full-width, **one row per individual slip**:
 
 | Doc | Type | Amt (RM) | Date✓ | Uniq✓ | Acct✓ | POS✓ | Cleared✓ | In FR | Notes |
 
-`In FR` column values:
-- `✓` — slip appears as its own line in the Fund Report.
-- `∑` — slip is part of an aggregated Fund Report line (multiple slips summed into one entry). Note which FR line it rolls into.
-- `✗` — slip is **not represented** in the Fund Report at all (understatement — automatic finding per §6 rule 12).
+`In FR` values: `✓` individual · `∑` part of an aggregated FR line · `✗` missing. Tick / cross per criterion, one-line note on failures.
 
-Tick / cross per other criterion; one-line note on failures. Immediately below the table, add a small "FR aggregation check" sub-table: for every Fund Report entry that aggregates multiple slips, show the FR line amount vs. the sum of the underlying slips and flag any variance.
+Immediately below the table, the **FR aggregation sub-table** (only rows that aggregate): `FR line | FR amount | Underlying slips | Sum of slips | Variance`. If no aggregated FR lines exist, omit the sub-table and the section header note already says "all individual, no aggregation".
 
-**Section 3 — Cash highlight**
-Opening cash, closing cash (Fund Report vs. calculated), variance. Highlight any mismatch in red.
+**Section 3 — Cash highlight** (left ~50 %)
 
-**Section 4 — Fuel quantity audit**
-Per product: opening qty, delivery qty, sales qty, calculated closing, reported closing, variance. Highlight variances.
+Table with columns `Item | FR | Computed | Var`. Rows in this order: `Opening cash`, `Cash revenue`, `CFP cash top-up`, `CDM deposited`, `Safeguards pick-up`, **bold** `Closing cash` (red if any variance, with the variance figure shown in the `Var` column; otherwise green tick or em-dash).
 
-**Section 5 — Findings & recommendations**
-Bulleted list of every flag, ordered by materiality (financial impact first, control weakness second). End with concrete management actions.
+**Section 4 — Fuel quantity** (right ~50 %)
+
+Table with columns `Product | Open | Deliv. | Sales (L) | Close | Var`. One row per fuel product (e.g., `Petrol`, `Diesel`). When a delivery occurred, the `Deliv.` cell shows `DELIV` (with the volume in the line below or in the body as appropriate). Highlight any non-zero `Var` in red.
+
+**Section 4b — POS tally** (right ~50 %, beneath Section 4)
+
+Table with columns `Check | POS | FR | Result`. Rows include at minimum:
+- `GreenPOS fuel`
+- `CFP vs PetrolFox`
+- `Merchant fuel`
+- `Autocount` (Buraqmart Autocount POS)
+- additional system-reconciliation rows where available.
+
+`Result` column shows `✓`, `✓ Verified`, or `✗ <variance description>`.
+
+**Section 5 — §4 checklist**
+
+Single-paragraph file-presence summary referencing §4 of this skill (Required daily files). Format:
+
+`Present: <list>. Partial: <list>. Missing: <list>. N/A: <list>.`
+
+**Section 6 — Findings & recommendations**
+
+Bulleted list. One bullet per finding, ordered by materiality (financial impact first, control weakness second, presentation/data-quality issues last). Each bullet follows this exact form:
+
+`FINDING <N> — <bold short title>.` Then a body sentence. End with `Action:` (also bold) followed by the concrete management action.
+
+Always close with a finding for each of these statuses, even when clean (so the reader can confirm the check ran):
+- `§6.11` — clearance verification status (verified / deferred + reason).
+- `§6.12` — aggregation integrity status (clean / variances flagged).
 
 ## 8. Workflow
 
@@ -186,5 +298,5 @@ Bulleted list of every flag, ordered by materiality (financial impact first, con
 2. Recall or ask for the three paths in §3 (daily-report root, bank-statement folder, audit-output root). Save any missing ones to memory on first run.
 3. List files present vs. missing for that station+date.
 4. Run all §6 checks, preserving every intermediate calculation.
-5. Render **two** landscape PDFs per §7 — English and Simplified Chinese — from the same computed figures. Create `<audit-output-root>/<YYYY>/<YYYY-MM>/<YYYY-MM-DD>/` if it does not exist (business-date tree, shared by all stations), then save both as `<Station>-<YYYY_MM_DD>-Audit_<YYYYMMDD>_<hh>_<mm>_EN.pdf` and `…_CH.pdf`. Produce no other files.
+5. Render **two** landscape PDFs per §7 — English and Simplified Chinese — from the same computed figures. Both PDFs must conform to the visual template in §7.1 (colours, typography, multi-column layout) and the section-by-section structure in §7.2 onwards (Sections 1, 2, 3, 4, 4b, 5, 6 in that order, with the title band + meta strip on top and the version-stamp footer on every page). Create `<audit-output-root>/<YYYY>/<YYYY-MM>/<YYYY-MM-DD>/` if it does not exist (business-date tree, shared by all stations), then save both as `<Station>-<YYYY_MM_DD>-Audit_<YYYYMMDD>_<hh>_<mm>_EN.pdf` and `…_CH.pdf`. Produce no other files.
 6. Reply in chat with the 3–5 most material findings and the absolute paths to both saved PDFs.
