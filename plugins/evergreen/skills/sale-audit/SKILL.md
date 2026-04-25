@@ -1,8 +1,8 @@
 ---
 name: sale-audit
 description: Use this skill whenever the user (Evergreen back-office / management) wants to audit, verify, or check the daily sale submission of a petrol station — TK (Tg. Kapor), BS (Berkat Setia), or BL (Bubul Lama). Triggers include phrases like "audit TK", "audit sale", "check BS sale", "verify fund report", "run daily audit", "daily sale audit for <date>", or any request to reconcile a station's Fund Report against its supporting documents and produce an audit PDF.
-version: 0.8.1
-updated: 2026-04-26 07:41
+version: 0.9.0
+updated: 2026-04-26 07:43
 ---
 
 # Sale Audit — Evergreen Petrol Stations
@@ -256,7 +256,27 @@ Then the **proof-of-fund table**, full-width, **one row per individual slip**:
 
 `In FR` values: `✓` individual · `∑` part of an aggregated FR line · `✗` missing. Tick / cross per criterion, one-line note on failures.
 
-Immediately below the table, the **FR aggregation sub-table** (only rows that aggregate): `FR line | FR amount | Underlying slips | Sum of slips | Variance`. If no aggregated FR lines exist, omit the sub-table and the section header note already says "all individual, no aggregation".
+**Column key (legend)** — render this **inside the PDF**, immediately under the proof-of-fund table, as a small light-grey caption strip in ~8 pt regular text so any reviewer can read the columns without leaving the report. Match the language of the PDF.
+
+English version:
+
+> **Date✓** slip's printed date matches the audited business date (§6 r.4).
+> **Uniq✓** slip is not a duplicate of any other proof-of-fund document (§6 r.5).
+> **Acct✓** deposit landed in one of the six approved Maybank/AmBank accounts (§2, §6 r.6).
+> **POS✓** slip's amount and channel reconcile to the POS system totals (§6 r.7–8).
+> **Cleared✓** credit confirmed in the bank-statement folder for the audited date — or T+1..T+3 for cheques (§6 r.11). Blank when verification is deferred.
+> **In FR** how the slip is represented in the Fund Report: `✓` individual line · `∑` part of an aggregated line · `✗` missing entirely (§6 r.12).
+
+Simplified Chinese version:
+
+> **日期✓** 收据日期与审核业务日期相符（§6 r.4）。
+> **唯一✓** 此收据非他张证据的重复（§6 r.5）。
+> **账户✓** 款项进入§2列出的六个核准 Maybank/AmBank 账户之一（§6 r.6）。
+> **POS✓** 收据金额与渠道与 POS 系统总额相符（§6 r.7–8）。
+> **已清算✓** 银行对账单已确认款项于审核日入账，支票允许 T+1 至 T+3（§6 r.11）。延后核对时此栏留空。
+> **在FR表** 此收据在资金报告中的呈现方式：`✓` 单独列出 · `∑` 属合并条目 · `✗` 完全缺漏（§6 r.12）。
+
+Immediately below the legend, the **FR aggregation sub-table** (only rows that aggregate): `FR line | FR amount | Underlying slips | Sum of slips | Variance`. If no aggregated FR lines exist, omit the sub-table and the section header note already says "all individual, no aggregation".
 
 **Section 3 — Cash highlight** (left ~50 %)
 
