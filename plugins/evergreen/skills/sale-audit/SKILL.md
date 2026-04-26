@@ -1,8 +1,8 @@
 ---
 name: sale-audit
 description: Use this skill whenever the user (Evergreen back-office / management) wants to audit, verify, or check the daily sale submission of a petrol station — TK (Tg. Kapor), BS (Berkat Setia), or BL (Bubul Lama). Triggers include phrases like "audit TK", "audit sale", "check BS sale", "verify fund report", "run daily audit", "daily sale audit for <date>", or any request to reconcile a station's Fund Report against its supporting documents and produce an audit PDF.
-version: 0.10.0
-updated: 2026-04-26 21:01
+version: 0.10.1
+updated: 2026-04-26 21:34
 ---
 
 # Sale Audit — Evergreen Petrol Stations
@@ -96,14 +96,14 @@ Run every check. Flag every failure.
     1. **Connectivity ping.** Before any per-slip lookup, GET `<URL>?token=<TOKEN>` (no other params). Expected response: `{"ok":true,"ping":"bank-ledger","row_count":<int>}`. If the response is missing, non-200, or `ok: false`, the ledger is **unreachable** for this run — do not abort; instead leave every slip's `Cleared✓` blank and raise §6.11-status finding `clearance verification deferred — bank-ledger Web App unreachable: <reason>`. A ping failure must never block the rest of the audit (§6 rules 1–10 still run).
     2. **Per-slip query.** For every proof-of-fund slip, GET:
        ```
-       <URL>?token=<TOKEN>&value_date=<YYYY-MM-DD>&account=<MBB-NNNN or AMB-NNNN>&amount=<RM>&direction=CR
+       <URL>?token=<TOKEN>&value_date=<YYYY-MM-DD>&account=<account>&amount=<RM>&direction=CR
        ```
-       For cheque-funded slips, also pass `&tolerance_days=3` so the Web App searches T..T+3 instead of T only.
-    3. **Match interpretation:**
-       - `total_count == 1` → the slip cleared. Set `Cleared✓ = ✓`. Capture the matched `txn_id` and (if relevant) the `posting_date` in Notes (e.g., `cleared T+1 — txn 8a3f…`).
-       - `total_count == 0` → no match. Set `Cleared✓ = ✗` with a short reason: `no matching credit on <date>` or `amount/account mismatch`. This is a finding.
-       - `total_count > 1` → ambiguous. Set `Cleared✓ = ?` and list the candidate `txn_id`s in Notes; raise an aggregation-flag finding so the user reconciles manually. Multiple identical-amount credits to the same account on the same day usually mean two slips were grouped or one was re-issued.
-    4. **Reverse check (unexplained credits).** After processing every slip, GET `<URL>?token=<TOKEN>&value_date=<audit date>&direction=CR` (no `account` or `amount` filter) to list **every** credit that landed on the audit date. Subtract the `txn_id`s you already consumed in step 3. Anything left over is an **unexplained credit** — raise as a finding with the txn details (potential undeclared revenue or misposted transfer).
+       The `account` parameter accepts the full 13-digit AmBank number (`8881058618135`), the last-4 (`8135`), or the branded form (`AMB-8135`); the Web App normalises before matching. For Maybank slips today, ingestion is not implemented (`bank-ledger` v0.3.0) — the Web App will return `total_count: 0` for any MBB account, which sale-audit must surface as a finding (not a silent miss). For cheque-funded slips, also pass `&tolerance_days=3` so the Web App searches `TRAN DATE ∈ [value_date, value_date+3]` instead of value_date alone.
+    3. **Match interpretation** — fields below come from the doGet response:
+       - `total_count == 1` → the slip cleared. Set `Cleared✓ = ✓`. Capture the match's `tran_date` (and if it differs from the audit date, write `cleared T+n`), the `sender_receiver`, and the `payment_ref` in Notes — e.g., `cleared 2026-04-25 — MALINAH BINTI TUTUNG / Pindahan Dana`.
+       - `total_count == 0` → no match. Set `Cleared✓ = ✗` with a short reason: `no matching credit on <date>` or `amount/account mismatch`. This is a finding. **For MBB-account slips today, always note `MBB ingestion not implemented in bank-ledger v0.3` so the user understands it's a coverage gap, not a real shortfall.**
+       - `total_count > 1` → ambiguous. Set `Cleared✓ = ?` and list each candidate's `account_no`, `amount`, `sender_receiver`, and `tran_time` in Notes; raise an aggregation-flag finding so the user reconciles manually. Multiple identical-amount credits to the same account on the same day usually mean two slips were grouped or one was re-issued.
+    4. **Reverse check (unexplained credits).** After processing every slip, GET `<URL>?token=<TOKEN>&value_date=<audit date>&direction=CR` (no `account` or `amount` filter) to list **every** credit that landed on the audit date. Subtract the rows you already consumed in step 3 (match by `account_no` + `amount` + `tran_time`). Anything left over is an **unexplained credit** — raise as a finding with the row's `account_no`, `amount`, `sender_receiver`, `payment_ref` (potential undeclared revenue or misposted transfer).
     5. **Network failures during the slip loop.** If the Web App returns an error mid-loop, retry once with a 5-second backoff. If still failing, fall back to ping-failure behaviour for the remaining slips (set `Cleared✓` blank, finding noted), and continue the audit. Never let a single network blip kill an entire daily audit.
     6. **No file-folder logic.** The bank-statement folder is gone. Do not look for, accept paths to, or attempt to parse PDF / image bank statements. The Web App is the only clearance source.
 12. **Fund Report aggregation integrity.** Staff sometimes sum several slips into a single Fund Report line (e.g., three cash-deposit slips reported as one "Cash deposits RMx" figure). For every Fund Report entry that aggregates more than one underlying slip, the sum of the underlying slips must equal the Fund Report line — flag any variance. Every individual slip must also appear somewhere in the Fund Report, either as its own line or as part of an aggregated line; any slip missing from the Fund Report entirely is an automatic finding (understatement). Audit always from the slips, never let the Fund Report's aggregated view suppress an individual row in the proof-of-fund table (see §7 Section 2).

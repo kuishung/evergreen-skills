@@ -1,203 +1,227 @@
 ---
 name: bank-ledger
-description: Use this skill whenever the user (Evergreen back-office) wants to maintain or query the master bank-ledger Google Sheet — the canonical record of every credit and debit hitting the six approved Maybank/AmBank accounts. Triggers include "refresh bank ledger", "import bank transactions", "check ledger", "show unmatched credits", "set up bank ledger", or any task involving incoming bank transaction emails or daily bank reconciliation against the master sheet.
-version: 0.2.0
-updated: 2026-04-26 21:01
+description: Use this skill whenever the user (Evergreen back-office) wants to maintain or query the master bank-ledger Google Sheet — the canonical record of every credit and debit hitting the six approved Maybank/AmBank accounts. Triggers include "refresh bank ledger", "import bank transactions", "check ledger", "show unmatched credits", "set up bank ledger", "tune bank-ledger parser", or any task involving incoming bank statement attachments or daily reconciliation against the master sheet.
+version: 0.3.0
+updated: 2026-04-26 21:34
 ---
 
 # Bank Ledger — Evergreen Master Transaction Sheet
 
-The single source of truth for every transaction hitting the six approved Maybank / AmBank accounts. Populated automatically every 30 minutes by a Google Apps Script that reads MBB and AmBank alert emails from `evergreenkk.sabah@gmail.com` and appends one row per transaction to a master Google Sheet.
+The single source of truth for every transaction hitting the six approved Maybank / AmBank accounts. Today the production pipeline covers **AmBank only**, ingesting daily statement CSVs that AmBank emails as password-protected ZIPs. A Google Apps Script runs every morning at 06:00, downloads the ZIP, sends it to a remote unzip helper, parses the CSV, and appends rows to the `Transactions` tab. A second function in the same script — `doGet()` — exposes the sheet as a JSON query API so `sale-audit` can verify clearance from any environment without Google credentials.
 
-This skill helps you set up that pipeline, query the sheet, and reconcile the day. It does **not** modify `sale-audit` — sale-audit will read from this sheet in a future revision; until then, sale-audit keeps using its existing bank-statement folder.
+`sale-audit` (v0.10+) reads from this sheet via the Web App. The bank-statement folder it used in earlier versions is **gone**.
 
 ---
 
-## 1. Why a separate skill
+## 1. Why a separate skill (vs. folding into sale-audit)
 
-Audit logic (`sale-audit`) and bank ingestion (`bank-ledger`) stay decoupled. They share data via the Google Sheet — neither calls the other directly. Either skill can change without breaking the other.
+Audit logic and bank ingestion stay decoupled. They share data via the Google Sheet — neither calls the other directly. The sheet schema is the contract; either side can change without breaking the other.
 
 ## 2. Bank accounts (must match `sale-audit` §2)
 
-The skill recognises only these six accounts. Any transaction email referencing an account outside this list is logged but flagged in the sheet as `account = OTHER` for human triage.
+The script recognises only these six accounts. AmBank emails reference each by its 2-digit suffix in the subject line (`*35)`, `*46)`, `*57)`); the Apps Script maps that suffix to the full 13-digit account number when writing the row.
 
-- **Maybank**: 510161015366, 560166149415, 560166149422
-- **AmBank**: 8881058618135, 8881058618146, 8881058618157
-
-Account values in the sheet are stored as `<bank-prefix>-<last-4>` for readability and partial-match safety: `MBB-5366`, `MBB-9415`, `MBB-9422`, `AMB-8135`, `AMB-8146`, `AMB-8157`. Bank emails almost always print the masked account as `xxxx5366` — the parser pulls the last 4 digits and prepends the bank prefix.
+- **Maybank**: 510161015366, 560166149415, 560166149422 — **not yet ingested** (see §9).
+- **AmBank**: 8881058618135, 8881058618146, 8881058618157.
 
 ## 3. Google Sheet — schema
 
-A single Google Sheet with one tab named **`transactions`**. Row 1 is the header. The Apps Script appends to the next empty row.
+A single Google Sheet with one tab named **`Transactions`** (capital T). Row 1 is the header — written automatically by the Apps Script on first run from AmBank's CSV column order.
 
-| # | Column           | Description                                                                                              |
-|---|------------------|----------------------------------------------------------------------------------------------------------|
-| 1 | `txn_id`         | sha256 of (`account` + `value_date` + `amount` + `narrative` + Gmail message-id). Primary dedup key.     |
-| 2 | `account`        | `MBB-5366`, `AMB-8135`, etc., or `OTHER` if last-4 doesn't match §2.                                     |
-| 3 | `value_date`     | `YYYY-MM-DD` — date the funds settled (extracted from the email body).                                   |
-| 4 | `posting_date`   | `YYYY-MM-DD HH:MM` — when the bank posted the entry (usually the email's send time).                     |
-| 5 | `amount`         | Numeric, RM, always positive. Direction is in column 6.                                                  |
-| 6 | `direction`      | `CR` (credit / money in) or `DR` (debit / money out).                                                    |
-| 7 | `narrative`      | Free-text bank reference / description / counterparty name.                                              |
-| 8 | `source_ref`     | Slip / transaction reference if extractable from the email (often blank for MBB).                        |
-| 9 | `source`         | `email-mbb`, `email-amb`, `csv-import`, or `manual`.                                                     |
-| 10 | `ingested_at`   | `YYYY-MM-DD HH:MM` — when the row landed in the sheet.                                                    |
-| 11 | `matched_slip`  | Filled in a later revision by `sale-audit` once the slip ↔ credit match is implemented. Blank for now.    |
-| 12 | `status`        | `new`, `matched`, `unmatched`, or `superseded`. Apps Script writes `new`; future sale-audit updates it.   |
+**24 columns, in this order:**
 
-The Sheet ID gets stored as a `reference` memory on first run, so you only paste it once.
+| # | Column                | Source / meaning                                                               |
+|---|-----------------------|---------------------------------------------------------------------------------|
+| 1 | `Account No`         | Full 13-digit AmBank account, e.g., `8881058618135`. Set by the script from the email subject suffix lookup. |
+| 2 | `SEQ NO`             | AmBank's per-statement sequence number.                                        |
+| 3 | `QR ID`              | DuitNow QR transaction id (often blank for non-QR transactions).               |
+| 4 | `TRAN DATE`          | Transaction value date in `DD/MM/YYYY`.                                        |
+| 5 | `TRAN TIME`          | `HH:MM:SS`.                                                                    |
+| 6 | `TRAN CODE`          | AmBank's internal transaction code (e.g., `1030`).                             |
+| 7 | `PROMO CODE`         | Internal promo / channel code.                                                 |
+| 8 | `TRAN DESC`          | Free text describing the transaction. Crucially, contains `CR` for credits and `DR` for debits — the skill uses this to infer direction. |
+| 9 | `SENDER/RECEIVER NAME` | Counterparty name (uppercase). Useful narrative for slip matching.           |
+| 10 | `PAYMENT REF`        | Bank reference / customer-supplied note.                                       |
+| 11 | `PAYMENT DET`        | Additional payment detail.                                                     |
+| 12 | `TRAN AMT`           | Gross transaction amount in MYR.                                               |
+| 13 | `NET AMT`            | Amount after MDR.                                                              |
+| 14 | `BAL`                | Running balance after this transaction.                                        |
+| 15 | `MDR`                | Merchant Discount Rate as a percentage string.                                 |
+| 16 | `STAT`               | Status: typically `Successful`.                                                |
+| 17 | `CHEQUE NO`          | `0` for non-cheque entries.                                                    |
+| 18 | `REF ID`             | Internal reference id.                                                         |
+| 19 | `STORE LBL`          | Merchant terminal label (POS / DuitNow only).                                  |
+| 20 | `TERMINAL LBL`       | Terminal id (POS only).                                                        |
+| 21 | `CONSUMER LBL`       | Consumer-facing label (POS / DuitNow only).                                    |
+| 22 | `REF LBL`            | Reference label.                                                               |
+| 23 | `MDR FLAT FEE`       | Flat fee component, if any.                                                    |
+| 24 | `Email Date`         | Date the AmBank email itself arrived. Added by the Apps Script.                |
 
-## 4. Paths and config
+The Sheet ID and tab name are referenced by both the daily ingestion and the doGet handler. Changing them without updating the constants in the script will break both.
 
-On first run, ask and save these `reference` memories:
+## 4. Paths and config (saved as `reference` memories)
 
-1. **Bank-ledger Sheet ID** — the long string in the Sheet's URL (between `/d/` and `/edit`). Example: `1aB2cD3eF4gH5iJ6kL7mN8oP9qR0sT_uVwXyZ`.
-2. **Apps Script trigger status** — flag indicating the 30-minute trigger is configured (`yes` once §7 setup is verified). The skill reminds the user to verify this on first run.
+On first run, ask and save these `reference` memories. Verify each on every reuse and never silently substitute a default.
 
-Verify both before doing any read/write — never silently write to the wrong sheet.
+1. **Bank-ledger Sheet ID** — the long string in the Sheet's URL.
+2. **Bank-ledger Web App URL** — the deployed `doGet` endpoint, format `https://script.google.com/macros/s/AKfycb…/exec`.
+3. **Bank-ledger Web App token** — the value of the Apps Script's `WEB_APP_TOKEN` script property (a long random string). Treat as a password; never log or echo it.
 
 ## 5. Workflow — interactive
 
-When the user invokes the skill in chat:
+When the user asks the skill questions in chat:
 
 1. Confirm Sheet ID is in memory; if not, prompt for it once.
-2. Read the `transactions` tab.
-3. Answer the user's question — common patterns:
-   - "show today's credits" → filter `value_date = today` and `direction = CR`.
-   - "any unmatched credits this week?" → filter `status = unmatched` within the last 7 days.
-   - "total received in MBB-5366 yesterday" → sum `amount` where `account = MBB-5366` and `value_date = yesterday` and `direction = CR`.
-   - "is RM 350 on 2026-04-25 to MBB-5366 in the ledger?" → look it up; return found / not found.
-4. Never mutate the sheet from the skill itself in v0.1.0 — the Apps Script is the only writer (avoids race conditions with the 30-min trigger).
+2. To answer "show today's credits", "any unmatched credits this week?", "is RM 350 on 2026-04-25 in the ledger?", call the Web App with the right query parameters (see §7 below) and parse the JSON.
+3. Never mutate the sheet from the skill. Only the Apps Script writes (avoids race conditions with the daily ingestion).
 
-## 6. Workflow — automatic (every 30 min, no human)
+## 6. Workflow — automatic (daily 06:00, no human)
 
-The 30-minute refresh runs entirely inside Google — no Claude session, no server cron. The Apps Script (see `apps-script/parse-bank-emails.gs`) does this loop:
+Runs entirely inside Google — no Claude session, no server cron. The Apps Script function `fetchAmBankToSheet` does this loop:
 
-1. Search Gmail for unread / unprocessed emails matching each bank's sender + subject pattern.
-2. For each matching email, run the bank-specific parser to extract `account`, `value_date`, `amount`, `direction`, `narrative`.
-3. Compute `txn_id`. Skip if already in the sheet (dedup).
-4. Append a new row with `status = new`.
-5. Apply a Gmail label `bank-ledger-processed` to the email so it is not re-parsed next cycle.
+1. Search Gmail for unread / unprocessed AmBank emails (`from:notification@ambankgroup.com has:attachment filename:zip newer_than:90d`).
+2. For each match, identify the destination account from the subject suffix (e.g., `*35)` → `8881058618135`).
+3. Download the `.zip` attachment, base64-encode it, POST it to the remote unzip helper at `https://ambank-unzip.onrender.com/unzip` with the ZIP password.
+4. Parse the returned CSV. Skip the header row on subsequent runs.
+5. Prepend the account number, append the email's received date, and write each row to the `Transactions` tab.
+6. Mark the Gmail message-id as processed via the `doneIds` script property so it is never re-ingested.
 
-If a parser fails to extract required fields, the email is **not** marked processed. It will be retried next cycle. After three failures, the script logs the message ID and email subject to a sheet tab `parse_failures` for manual review.
+Failures are logged to the Apps Script execution log (Apps Script editor → **Executions**); they do not block subsequent emails.
 
-## 7. Setup — one-time
+## 7. doGet — Web App query API
 
-### 7.1 Create the master Google Sheet
+Used by `sale-audit` to verify clearance. URL = the Web App URL from §4 item 2. Token is appended on every request.
 
-1. Open `evergreenkk.sabah@gmail.com` Gmail in a browser.
-2. Go to <https://sheets.new> → name the file **Evergreen Bank Ledger**.
-3. Rename the default tab from `Sheet1` to `transactions`.
-4. Paste this header into row 1 (one column per cell, in order):
-   ```
-   txn_id  account  value_date  posting_date  amount  direction  narrative  source_ref  source  ingested_at  matched_slip  status
-   ```
-5. Freeze row 1: View → Freeze → 1 row.
-6. Copy the Sheet ID from the URL (the long string between `/d/` and `/edit`). Save it — you'll paste it into Apps Script and into Claude.
-7. Create a second empty tab named `parse_failures` for the Apps Script to log emails it can't parse.
+**Health-check / connectivity ping** — supply only `token`:
 
-### 7.2 Install the Apps Script
+```
+GET <URL>?token=<TOKEN>
+→ { "ok": true, "ping": "bank-ledger", "row_count": <int> }
+```
+
+`sale-audit` runs this at the start of every audit to populate the meta-strip status.
+
+**Per-slip clearance lookup** — supply `value_date` plus any of the optional filters:
+
+| Param | Required? | Notes |
+|---|---|---|
+| `token` | yes | Must equal the `WEB_APP_TOKEN` script property. |
+| `value_date` | yes | `YYYY-MM-DD`. |
+| `account` | optional | Full 13-digit (`8881058618135`), last-4 (`8135`), or `AMB-8135`. The endpoint normalises before matching. |
+| `amount` | optional | Match against `TRAN AMT`, tolerance ±0.01. |
+| `direction` | optional | `CR` (default) or `DR`. Inferred from `\bCR\b` / `\bDR\b` in `TRAN DESC`. |
+| `tolerance_days` | optional | 0..7, default 3. Accepts `TRAN DATE` up to value_date + N days (used for cheques). |
+
+Response on success:
+
+```
+{
+  "ok": true,
+  "total_count": 1,
+  "matches": [
+    {
+      "account_no": "8881058618135",
+      "tran_date": "2026-04-25",
+      "tran_time": "19:24:57",
+      "tran_desc": "MISC CR",
+      "sender_receiver": "MALINAH BINTI TUTUNG",
+      "payment_ref": "Pindahan Dana",
+      "amount": 8.62,
+      "net_amt": 8.62,
+      "bal": 12859.48,
+      "stat": "Successful",
+      "direction": "CR",
+      ...
+    }
+  ]
+}
+```
+
+Response on error:
+
+```
+{ "ok": false, "error": "<reason>" }
+```
+
+`sale-audit` handles the three match cases (`total_count` 0 / 1 / >1) per its own §6 rule 11.
+
+## 8. Setup — one-time
+
+### 8.1 Create the master Google Sheet
+
+1. Sign into Gmail at `evergreenkk.sabah@gmail.com`.
+2. Visit <https://sheets.new> → rename the file **Evergreen Bank Ledger**.
+3. Right-click `Sheet1` → rename to **`Transactions`** (case-sensitive).
+4. Copy the Sheet ID from the URL (between `/d/` and `/edit`) — you'll paste it into the script in §8.2.
+
+The Apps Script writes the header row automatically on first run, so you don't need to paste headers manually.
+
+### 8.2 Install the Apps Script
 
 1. In the Sheet: **Extensions → Apps Script**.
-2. Delete any starter code in `Code.gs`.
-3. Copy the entire contents of `apps-script/parse-bank-emails.gs` (in this skill folder) and paste it in.
-4. At the top of the script, replace `PUT-YOUR-SHEET-ID-HERE` with the Sheet ID from step 7.1.
-5. Save (`Ctrl+S`). When prompted, name the project **Bank Ledger Importer**.
-6. Click **Run** → select function `parseAllBankEmails` → grant the requested Gmail + Sheets permissions (one-time consent for the Gmail account).
-7. Confirm at least one row appears in the sheet (run on an inbox that already has bank emails to test). If parsing fails, see §8.
+2. Delete the placeholder code; paste the entire contents of `apps-script/parse-bank-emails.gs` (this skill folder).
+3. Fill in the constants at the top of the file:
+   - `ZIP_PASSWORD` — the AmBank-issued password for the daily ZIP.
+   - `SHEET_ID` — from §8.1.
+4. Save (`Ctrl+S`). Project name: **Bank Ledger Importer**.
 
-### 7.3 Schedule the 30-minute trigger
+### 8.3 Set the Web App token
 
-1. In Apps Script, click the **clock icon** (Triggers) on the left sidebar.
-2. **Add Trigger**:
-   - Function to run: `parseAllBankEmails`
-   - Deployment: `Head`
-   - Event source: `Time-driven`
-   - Type of time-based trigger: `Minutes timer`
-   - Select minute interval: `Every 30 minutes`
-3. Save. Google will run the parser automatically every 30 minutes from now on.
-
-### 7.4 Set the Web App token
-
-The deployed Web App in §7.5 is gated by a shared secret. The script reads this token from a Script Property — never hard-coded — so the value never leaks via the GitHub source.
-
-1. Apps Script editor → **gear icon (Project Settings)** in the left sidebar.
-2. Scroll to **Script properties** → **Add script property**.
-3. Set:
-   - Property: `WEB_APP_TOKEN`
-   - Value: a long random string (at least 32 characters; you can generate one at <https://passwordsgenerator.net/> with all character types). Treat it like a password.
+1. Apps Script editor → **gear icon (Project Settings)** → **Script properties → Add script property**.
+2. Property name: `WEB_APP_TOKEN`.
+3. Property value: a long random string (≥32 chars). Generate at <https://passwordsgenerator.net/>; save it somewhere safe — you'll paste it into Claude memory in §8.6.
 4. Save.
-5. **Copy the value** to a temporary note — you'll paste it into Claude memory in §7.7.
 
-### 7.5 Deploy as a Web App (the query API for sale-audit)
+### 8.4 Schedule the daily 06:00 trigger
 
-This step makes `doGet` reachable over HTTPS so `sale-audit` can verify clearance from any environment without Google credentials.
+1. In the Apps Script editor, select function **`setupTrigger`** from the dropdown.
+2. **Run**. Grant Gmail / Sheets / external request permissions on first consent (one-time).
+3. The script wipes any existing triggers in this project and creates a single daily 06:00 trigger calling `fetchAmBankToSheet`. Verify in the **clock icon (Triggers)** sidebar that exactly one trigger exists.
+
+### 8.5 Deploy as a Web App (the query API)
 
 1. Apps Script editor → top-right **Deploy → New deployment**.
 2. Click the gear next to **Select type → Web app**.
-3. Fill in:
-   - Description: `Bank Ledger Query API v0.2`
-   - Execute as: **Me (your email)** — the script runs with your Sheet permissions.
-   - Who has access: **Anyone** — required so external callers can reach it; the token (§7.4) is the actual gate.
-4. **Deploy**. Grant the additional permissions Google asks for (one-time consent).
-5. Copy the **Web app URL** Google shows you. It looks like:
-   ```
-   https://script.google.com/macros/s/AKfycb…long…/exec
-   ```
-6. Save the URL alongside the token from §7.4 — you'll paste both into Claude memory in §7.7.
+3. Description: `Bank Ledger Query API v0.3`. Execute as: **Me**. Who has access: **Anyone** (the token gates access).
+4. **Deploy**, grant the additional permissions Google asks for, copy the **Web app URL**.
 
-> Re-deploying after future code edits: **Deploy → Manage deployments → pencil icon → Version: New version → Deploy**. The URL stays the same, so Claude memory doesn't need updating.
+> **Re-deploying after future code edits** — do not Deploy → New deployment again; instead, **Deploy → Manage deployments → pencil → Version: New version → Deploy**. The URL stays the same and Claude memory does not need updating.
 
-### 7.6 Verify the Web App responds
+### 8.6 Verify the Web App responds
 
-Open this URL in your browser, replacing `<URL>` and `<TOKEN>`:
+Open in a browser, replacing `<URL>` and `<TOKEN>`:
 
 ```
 <URL>?token=<TOKEN>
 ```
 
-You should see JSON like `{"ok":true,"ping":"bank-ledger","row_count":12}`. If you see `{"ok":false,"error":"invalid token"}`, the token doesn't match what's in Script Properties — re-check §7.4. If you see a Google error page, the deployment didn't succeed — re-do §7.5.
+Expect `{"ok":true,"ping":"bank-ledger","row_count":<int>}`. If you see `invalid token`, re-check §8.3. If you see a Google error page, the deployment didn't succeed — re-do §8.5.
 
-### 7.7 Tell Claude
+### 8.7 Tell Claude
 
-In Claude, say:
+In a chat, say:
 
 ```
 Set up bank ledger.
-Sheet ID: <ID from §7.1>
-Web App URL: <URL from §7.5>
-Web App token: <TOKEN from §7.4>
+Sheet ID: <ID from §8.1>
+Web App URL: <URL from §8.5>
+Web App token: <TOKEN from §8.3>
 ```
 
-The skill stores all three in `reference` memory and confirms connectivity by pinging the Web App.
+The skill stores all three as `reference` memories and confirms connectivity by pinging the Web App.
 
-## 8. Email parser — tuning
+## 9. Limitations and known issues (v0.3.0)
 
-The shipped parser in `apps-script/parse-bank-emails.gs` is a **starter template**. It has reasonable regex for typical MBB and AmBank alert formats, but real emails vary by:
-
-- **Account product** (savings vs current vs business)
-- **Channel** (DuitNow QR vs IBG vs Instant Transfer vs CDM deposit)
-- **Bank format updates** (banks change subject lines occasionally)
-
-To tune the parser for your actual emails:
-
-1. Forward 5–10 sample MBB transaction emails and 5–10 AmBank emails to Kui Shung.
-2. We update `parse-bank-emails.gs` with corrected regex and ship a new skill version.
-3. Replace the Apps Script content with the updated version (steps 7.2.3–7.2.5).
-
-The `parse_failures` sheet tab will accumulate any email the script could not parse. Review it weekly; emails that recur there are signals the parser needs another rule.
-
-## 9. Limitations and known issues (v0.1.0)
-
-- **Bookkeeper only** — `sale-audit` does **not** read this sheet yet. That integration ships in a follow-up release once the ledger has been observed running cleanly for a week.
-- **No write-back from skill** — the skill in chat is read-only on the sheet; only the Apps Script writes.
-- **Parser is starter-quality** — see §8.
-- **DuitNow QR** alerts often omit the destination account number. The parser logs them as `account = OTHER` for human triage.
-- **Email rate limit** — Apps Script can read up to ~20,000 emails per day (well above your volume). If you ever miss a day's transactions, just run `parseAllBankEmails` manually from the Apps Script editor.
+- **AmBank only.** Maybank ingestion is **not implemented**. `sale-audit` clearance lookups for MBB-prefixed accounts will return `total_count: 0` until MBB ingestion is added; sale-audit treats that as a finding and flags the slip for manual review. Adding MBB requires a separate ingestion pattern (Maybank typically does not email password-protected daily CSVs the same way), to be designed when needed.
+- **Remote unzip dependency.** The daily ingestion offloads ZIP unlocking to <https://ambank-unzip.onrender.com/unzip>. If that service is offline, the daily run fails with `Unzip failed: ...` in the execution log — the script does not write partial rows; it simply skips that email and tries again the next day. Long-term, host the unzipper somewhere we control.
+- **No MDR netting.** The audit reconciles against `TRAN AMT` (gross). If you ever switch to `NET AMT`, update sale-audit §6 rule 11 and the doGet helper consistently.
+- **Direction inference relies on `TRAN DESC`.** Rows where `TRAN DESC` lacks an unambiguous `CR` / `DR` token (rare for AmBank) are filtered out as `direction = UNKNOWN`. If you start seeing such rows, expand the inference rules.
+- **No write-back from skill.** The skill is read-only on the sheet from chat; only the Apps Script writes (avoids races with the daily trigger).
 
 ## 10. Non-negotiables
 
 - Never write to the sheet from the skill (only the Apps Script writes).
-- Never invent account mappings — if the last-4 doesn't match §2, the row's `account` is `OTHER`.
-- Never modify a row whose `status = matched` (sale-audit will eventually own that column).
-- Never re-process an email already labelled `bank-ledger-processed`.
+- Never invent account mappings — if a row's `Account No` doesn't match any of the six in §2, sale-audit treats it as out-of-scope.
+- Never modify a row already in the sheet — the ledger is append-only.
+- Never re-process an email already in the `doneIds` script property.
+- Never log or echo the Web App token outside the user's own session.
