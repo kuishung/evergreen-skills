@@ -320,7 +320,7 @@ function doGet(e) {
         account_no:      String(row[COLS.ACCOUNT_NO]),
         seq_no:          row[COLS.SEQ_NO],
         tran_date:       formatDate_(tranDate, 'yyyy-MM-dd'),
-        tran_time:       String(row[COLS.TRAN_TIME] || '').trim(),
+        tran_time:       formatTimeCell_(row[COLS.TRAN_TIME]),
         tran_code:       row[COLS.TRAN_CODE],
         tran_desc:       String(row[COLS.TRAN_DESC] || '').trim(),
         sender_receiver: String(row[COLS.SENDER] || '').trim(),
@@ -387,6 +387,21 @@ function parseISODate_(s) {
 function formatDate_(d, pattern) {
   const tz = Session.getScriptTimeZone() || 'Asia/Kuala_Lumpur';
   return Utilities.formatDate(d, tz, pattern || 'yyyy-MM-dd HH:mm');
+}
+
+/**
+ * Format the TRAN TIME cell. Google Sheets stores time-only values
+ * as Date objects with the 1899-12-30 epoch + the time of day; the
+ * naive `String(d)` rendering gives something like "Sat Dec 30 1899
+ * 19:24:57 GMT+0655 (Singapore Standard Time)". Strip the date part
+ * and return only HH:mm:ss when we get a Date; pass strings through
+ * unchanged in case AmBank ever sends pre-formatted text.
+ */
+function formatTimeCell_(raw) {
+  if (raw instanceof Date) {
+    return Utilities.formatDate(raw, Session.getScriptTimeZone() || 'Asia/Kuala_Lumpur', 'HH:mm:ss');
+  }
+  return String(raw || '').trim();
 }
 
 function jsonResponse_(obj) {
