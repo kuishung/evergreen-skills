@@ -52,7 +52,7 @@ const BANK_RULES = [
   {
     code: 'AMB',
     senderQuery: 'from:(ambankgroup.com OR ambank.com.my OR amonline.com.my OR ambonline)',
-    subjectRegex: /(transaction|notification|alert|received|transfer|credit|debit|paid)/i,
+    subjectRegex: /(transaction|notification|alert|received|transfer|credit|debit|paid|menerima|memindah|telah|akaun|duit)/i,
     parser: parseAMBEmail,
   },
 ];
@@ -173,38 +173,88 @@ function parseMBBEmail(msg) {
 // ---------- AmBank parser ----------
 
 /**
- * Typical AmBank alert format — refine once samples are collected.
- * Defensive defaults: same fields as MBB, slightly different regex.
+ * AmBank alert format (bilingual EN + BM in the same email body).
+ * Sample (credit / fund transfer in):
+ *
+ *   Dear Sir/Madam,
+ *   Greetings from AmBank/AmBank Islamic!
+ *   We are pleased to inform that you have received the following fund
+ *   transfer credited to your Current/Savings Account/-i. The details
+ *   are as below:
+ *     Date & Time: 26/04/2026 07:24:09
+ *     Transfer From: ROHANI
+ *     To Current/Savings Account/-i No.: ***8146
+ *     Bank Name: AmBank/AmBank Islamic
+ *     Amount: MYR 59.70
+ *     Transfer Details: Pindahan Dana
+ *
+ * The same body repeats in Bahasa Melayu lower down with labels like
+ * "Tarikh & Masa", "Pemindahan Dari", "Akaun Semasa/Simpanan/-i No.",
+ * "Amaun", "Butiran Pemindahan". The regex below matches either
+ * language; first-match wins, and EN sits first in the body so EN is
+ * preferred. Direction is inferred from the surrounding prose
+ * ("credited to" → CR, "debited from" / "memindahkan" → DR), default
+ * CR (safer for clearance: a missed credit is worse than a misclassed
+ * debit).
  */
 function parseAMBEmail(msg) {
   const body = msg.getPlainBody() || '';
+  const subject = msg.getSubject() || '';
 
-  const acctMatch = body.match(/account\s+(?:no\.?|number)?\s*[:\-]?\s*[\d\sxX*]*?(\d{4})\b/i);
-  const amtMatch = body.match(/(?:RM|MYR)\s*([\d,]+\.\d{2})/i);
-  const dirMatch = body.match(/\b(received|debited|transferred|credit(?:ed)?|debit|deducted|paid)\b/i);
-  const dateMatch = body.match(/(\d{2})[\/\-](\d{2})[\/\-](\d{4})/);
-  const refMatch = body.match(/(?:reference|ref\.?|trans(?:action)?\s*id)\s*[:\-]?\s*([A-Z0-9\-_]+)/i);
+  // Account — match either "To/From <something> Account/-i No.: ***1234"
+  // (EN) or "Akaun ... No.: ***1234" (BM). Stars are sometimes literal *
+  // and sometimes the unicode bullet ●; allow either.
+  const acctMatch =
+    body.match(/(?:To|From|Kepada|Dari)\b[^:]{0,80}?Account[^:]*No\.?\s*:\s*[*•●xX]+\s*(\d{4})/i) ||
+    body.match(/Akaun[^:]{0,80}?No\.?\s*:\s*[*•●xX]+\s*(\d{4})/i) ||
+    body.match(/[*•●xX]{2,}\s*(\d{4})\b/);
 
-  if (!acctMatch || !amtMatch || !dateMatch) return null;
+  // Amount — "Amount: MYR 59.70" / "Amaun: RM 1,234.56"
+  const amtMatch = body.match(/(?:Amount|Amaun)\s*:\s*(?:MYR|RM)\s*([\d,]+\.\d{2})/i);
+
+  // Date & Time — "Date & Time: 26/04/2026 07:24:09" / "Tarikh & Masa: ..."
+  const dtMatch = body.match(
+    /(?:Date\s*(?:&|and)?\s*Time|Tarikh\s*(?:&|dan)?\s*Masa)\s*:\s*(\d{2})\/(\d{2})\/(\d{4})(?:\s+(\d{2}):(\d{2})(?::\d{2})?)?/i
+  );
+
+  // Counterparty — "Transfer From: ROHANI" or "Transfer To: ..." / BM equivalents
+  const partyMatch =
+    body.match(/(?:Transfer\s+From|Pemindahan\s+Dari)\s*:\s*([^\r\n]+)/i) ||
+    body.match(/(?:Transfer\s+To|Pemindahan\s+Kepada)\s*:\s*([^\r\n]+)/i);
+
+  // Transfer details / narrative free-text
+  const detailsMatch = body.match(/(?:Transfer\s+Details|Butiran\s+Pemindahan)\s*:\s*([^\r\n]+)/i);
+
+  if (!acctMatch || !amtMatch || !dtMatch) return null;
 
   const last4 = acctMatch[1];
   const account = ACCOUNT_LOOKUP[last4] || 'OTHER';
   const amount = parseFloat(amtMatch[1].replace(/,/g, ''));
-  const dirRaw = (dirMatch && dirMatch[1]) ? dirMatch[1].toLowerCase() : 'received';
-  const direction = /(received|credit|paid\s*to)/.test(dirRaw) ? 'CR' : 'DR';
-  const value_date = `${dateMatch[3]}-${dateMatch[2]}-${dateMatch[1]}`;
-  const narrative = (msg.getSubject() || '').slice(0, 100);
-  const source_ref = refMatch ? refMatch[1] : '';
+
+  // Direction inference
+  let direction = 'CR';
+  if (/credited\s+to\s+your|received\s+the\s+following|menerima/i.test(body)) direction = 'CR';
+  else if (/debited\s+from\s+your|transferred\s+from\s+your|memindahkan|telah\s+keluar/i.test(body)) direction = 'DR';
+
+  const value_date = `${dtMatch[3]}-${dtMatch[2]}-${dtMatch[1]}`;
+  const posting_time = (dtMatch[4] && dtMatch[5])
+    ? `${value_date} ${dtMatch[4]}:${dtMatch[5]}`
+    : formatDate_(msg.getDate());
+
+  const counterparty = partyMatch ? partyMatch[1].trim() : '';
+  const details = detailsMatch ? detailsMatch[1].trim() : '';
+  const narrativeParts = [counterparty, details].filter(Boolean);
+  const narrative = (narrativeParts.length ? narrativeParts.join(' / ') : subject).slice(0, 200);
 
   return buildTxn_({
     bankCode: 'AMB',
     account,
     value_date,
-    posting_date: formatDate_(msg.getDate()),
+    posting_date: posting_time,
     amount,
     direction,
     narrative,
-    source_ref,
+    source_ref: '',
     messageId: msg.getId(),
     source: 'email-amb',
   });
