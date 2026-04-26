@@ -30,6 +30,13 @@ const TXN_TAB = 'transactions';
 const FAIL_TAB = 'parse_failures';
 const PROCESSED_LABEL = 'bank-ledger-processed';
 
+// The doGet query API requires a shared secret token. Set it once via
+// Apps Script editor → Project Settings → Script properties → add
+// property name WEB_APP_TOKEN with a long random string. Never hard-code
+// the token here — keep it in script properties so it does not leak via
+// the GitHub source.
+const TOKEN_PROPERTY_KEY = 'WEB_APP_TOKEN';
+
 // Allowed bank accounts — last 4 digits → bank-prefixed code (mirrors
 // sale-audit §2). Anything else becomes "OTHER".
 const ACCOUNT_LOOKUP = {
@@ -328,4 +335,132 @@ function sha256_(s) {
 function formatDate_(d) {
   const tz = Session.getScriptTimeZone() || 'Asia/Kuala_Lumpur';
   return Utilities.formatDate(d, tz, 'yyyy-MM-dd HH:mm');
+}
+
+// ---------- doGet — query API for sale-audit clearance verification ----------
+
+/**
+ * HTTP GET handler exposed when the Apps Script project is deployed as
+ * a Web App. Used by `sale-audit` (running on the Win 11 server or in
+ * scheduled Cowork) to verify whether a proof-of-fund slip cleared.
+ *
+ * Required query parameters:
+ *   token        — must equal the WEB_APP_TOKEN script property
+ *   value_date   — YYYY-MM-DD; the slip's expected settlement date
+ *
+ * Optional query parameters:
+ *   account        — `MBB-5366` etc.; restrict to one account
+ *   amount         — exact amount in RM; tolerance ±0.01
+ *   direction      — `CR` (default) or `DR`
+ *   tolerance_days — integer 0..7 (default 3); accept value_date up to
+ *                    +N working days later, used for cheques
+ *
+ * Response is always JSON with HTTP 200; the `ok` field signals success.
+ *   { "ok": true, "matches": [ {...row}, ... ], "total_count": N }
+ *   { "ok": false, "error": "<reason>" }
+ *
+ * Health-check call (no value_date): returns
+ *   { "ok": true, "ping": "bank-ledger", "row_count": <int> }
+ * so sale-audit can ping at start of run to verify connectivity.
+ */
+function doGet(e) {
+  try {
+    const params = (e && e.parameter) ? e.parameter : {};
+
+    // Token check — fail fast and never reveal the expected token.
+    const expected = PropertiesService.getScriptProperties().getProperty(TOKEN_PROPERTY_KEY);
+    if (!expected) {
+      return jsonResponse_({ ok: false, error: 'WEB_APP_TOKEN script property not configured' });
+    }
+    if (params.token !== expected) {
+      return jsonResponse_({ ok: false, error: 'invalid token' });
+    }
+
+    const ss = SpreadsheetApp.openById(SHEET_ID);
+    const sheet = ss.getSheetByName(TXN_TAB);
+    if (!sheet) {
+      return jsonResponse_({ ok: false, error: `tab "${TXN_TAB}" not found` });
+    }
+
+    // Health-check mode — caller did not supply value_date.
+    if (!params.value_date) {
+      const lastRow = sheet.getLastRow();
+      return jsonResponse_({
+        ok: true,
+        ping: 'bank-ledger',
+        row_count: Math.max(0, lastRow - 1),
+      });
+    }
+
+    const targetDate = String(params.value_date).trim();
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(targetDate)) {
+      return jsonResponse_({ ok: false, error: 'value_date must be YYYY-MM-DD' });
+    }
+
+    const targetAccount = params.account ? String(params.account).trim() : null;
+    const targetAmount = params.amount ? parseFloat(params.amount) : null;
+    const direction = params.direction ? String(params.direction).toUpperCase().trim() : 'CR';
+    const toleranceDays = Math.max(0, Math.min(7, parseInt(params.tolerance_days || '3', 10) || 0));
+
+    const dateStart = parseISODate_(targetDate);
+    const dateEnd = new Date(dateStart);
+    dateEnd.setDate(dateEnd.getDate() + toleranceDays);
+
+    const lastRow = sheet.getLastRow();
+    if (lastRow < 2) {
+      return jsonResponse_({ ok: true, matches: [], total_count: 0 });
+    }
+
+    const data = sheet.getRange(2, 1, lastRow - 1, 12).getValues();
+    const matches = [];
+
+    for (let i = 0; i < data.length; i++) {
+      const row = data[i];
+      const txn_id = row[0];
+      const account = row[1];
+      const value_date = String(row[2]).trim();
+      const posting_date = row[3];
+      const amount = parseFloat(row[4]);
+      const dir = row[5];
+      const narrative = row[6];
+      const source_ref = row[7];
+      const source = row[8];
+      const ingested_at = row[9];
+      const matched_slip = row[10];
+      const status = row[11];
+
+      const rowDate = parseISODate_(value_date);
+      if (!rowDate) continue;
+      if (rowDate < dateStart || rowDate > dateEnd) continue;
+
+      if (direction && dir !== direction) continue;
+      if (targetAccount && account !== targetAccount) continue;
+      if (targetAmount !== null && Math.abs(amount - targetAmount) > 0.01) continue;
+
+      matches.push({
+        txn_id, account, value_date,
+        posting_date: typeof posting_date === 'string' ? posting_date : formatDate_(posting_date),
+        amount, direction: dir,
+        narrative, source_ref, source,
+        ingested_at: typeof ingested_at === 'string' ? ingested_at : formatDate_(ingested_at),
+        matched_slip, status,
+      });
+    }
+
+    return jsonResponse_({ ok: true, matches, total_count: matches.length });
+  } catch (err) {
+    return jsonResponse_({ ok: false, error: 'unhandled: ' + String(err) });
+  }
+}
+
+function jsonResponse_(obj) {
+  return ContentService
+    .createTextOutput(JSON.stringify(obj))
+    .setMimeType(ContentService.MimeType.JSON);
+}
+
+function parseISODate_(s) {
+  const m = String(s || '').match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (!m) return null;
+  return new Date(parseInt(m[1], 10), parseInt(m[2], 10) - 1, parseInt(m[3], 10));
 }

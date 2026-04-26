@@ -1,8 +1,8 @@
 ---
 name: bank-ledger
 description: Use this skill whenever the user (Evergreen back-office) wants to maintain or query the master bank-ledger Google Sheet — the canonical record of every credit and debit hitting the six approved Maybank/AmBank accounts. Triggers include "refresh bank ledger", "import bank transactions", "check ledger", "show unmatched credits", "set up bank ledger", or any task involving incoming bank transaction emails or daily bank reconciliation against the master sheet.
-version: 0.1.2
-updated: 2026-04-26 09:05
+version: 0.2.0
+updated: 2026-04-26 21:01
 ---
 
 # Bank Ledger — Evergreen Master Transaction Sheet
@@ -117,9 +117,59 @@ If a parser fails to extract required fields, the email is **not** marked proces
    - Select minute interval: `Every 30 minutes`
 3. Save. Google will run the parser automatically every 30 minutes from now on.
 
-### 7.4 Tell Claude
+### 7.4 Set the Web App token
 
-In Claude, say *"set up bank ledger, my sheet ID is &lt;ID&gt;"*. The skill stores the Sheet ID in `reference` memory and confirms by reading the header row.
+The deployed Web App in §7.5 is gated by a shared secret. The script reads this token from a Script Property — never hard-coded — so the value never leaks via the GitHub source.
+
+1. Apps Script editor → **gear icon (Project Settings)** in the left sidebar.
+2. Scroll to **Script properties** → **Add script property**.
+3. Set:
+   - Property: `WEB_APP_TOKEN`
+   - Value: a long random string (at least 32 characters; you can generate one at <https://passwordsgenerator.net/> with all character types). Treat it like a password.
+4. Save.
+5. **Copy the value** to a temporary note — you'll paste it into Claude memory in §7.7.
+
+### 7.5 Deploy as a Web App (the query API for sale-audit)
+
+This step makes `doGet` reachable over HTTPS so `sale-audit` can verify clearance from any environment without Google credentials.
+
+1. Apps Script editor → top-right **Deploy → New deployment**.
+2. Click the gear next to **Select type → Web app**.
+3. Fill in:
+   - Description: `Bank Ledger Query API v0.2`
+   - Execute as: **Me (your email)** — the script runs with your Sheet permissions.
+   - Who has access: **Anyone** — required so external callers can reach it; the token (§7.4) is the actual gate.
+4. **Deploy**. Grant the additional permissions Google asks for (one-time consent).
+5. Copy the **Web app URL** Google shows you. It looks like:
+   ```
+   https://script.google.com/macros/s/AKfycb…long…/exec
+   ```
+6. Save the URL alongside the token from §7.4 — you'll paste both into Claude memory in §7.7.
+
+> Re-deploying after future code edits: **Deploy → Manage deployments → pencil icon → Version: New version → Deploy**. The URL stays the same, so Claude memory doesn't need updating.
+
+### 7.6 Verify the Web App responds
+
+Open this URL in your browser, replacing `<URL>` and `<TOKEN>`:
+
+```
+<URL>?token=<TOKEN>
+```
+
+You should see JSON like `{"ok":true,"ping":"bank-ledger","row_count":12}`. If you see `{"ok":false,"error":"invalid token"}`, the token doesn't match what's in Script Properties — re-check §7.4. If you see a Google error page, the deployment didn't succeed — re-do §7.5.
+
+### 7.7 Tell Claude
+
+In Claude, say:
+
+```
+Set up bank ledger.
+Sheet ID: <ID from §7.1>
+Web App URL: <URL from §7.5>
+Web App token: <TOKEN from §7.4>
+```
+
+The skill stores all three in `reference` memory and confirms connectivity by pinging the Web App.
 
 ## 8. Email parser — tuning
 

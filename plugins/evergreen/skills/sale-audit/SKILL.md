@@ -1,8 +1,8 @@
 ---
 name: sale-audit
 description: Use this skill whenever the user (Evergreen back-office / management) wants to audit, verify, or check the daily sale submission of a petrol station — TK (Tg. Kapor), BS (Berkat Setia), or BL (Bubul Lama). Triggers include phrases like "audit TK", "audit sale", "check BS sale", "verify fund report", "run daily audit", "daily sale audit for <date>", or any request to reconcile a station's Fund Report against its supporting documents and produce an audit PDF.
-version: 0.9.0
-updated: 2026-04-26 07:43
+version: 0.10.0
+updated: 2026-04-26 21:01
 ---
 
 # Sale Audit — Evergreen Petrol Stations
@@ -28,15 +28,18 @@ Any deposit/transfer to an account outside this list is an automatic finding.
 
 ## 3. Network file server & output location
 
-On first run, ask the user for **three** paths and save each to memory as a `reference` memory so they are never asked again:
+On first run, ask the user for the inputs below and save each to memory as a `reference` memory so they are never asked again:
 
 1. **Daily-report root path** — per-station, per-date folders containing the files in §4.
-2. **Bank-statement folder path** — kept separately from daily reports. Holds internet-banking screen-printouts whose date ranges overlap (see §6 rule 11 for how the skill pools and dedupes them).
-3. **Audit-output root** — a **single** folder shared by all stations. The skill creates the date tree inside it as `<audit-output-root>/<YYYY>/<YYYY-MM>/<YYYY-MM-DD>/` and writes every station's PDF into the same leaf folder, so the user never has to switch directories between stations. If an existing memory points to a per-station path, treat only its parent as the new root, confirm with the user once, and update the memory.
+2. **Bank-ledger Web App URL** — the deployed `bank-ledger` Apps Script Web App. Format: `https://script.google.com/macros/s/AKfycb.../exec`. Set up via the `bank-ledger` skill's §7. Used by §6 rule 11 to verify clearance from any environment (your laptop, the Win 11 server, scheduled Cowork) without Google credentials. Replaces the old "bank-statement folder" path.
+3. **Bank-ledger Web App token** — the shared-secret string stored as the Apps Script's `WEB_APP_TOKEN` script property. Required on every request to the Web App. Treat as a password.
+4. **Audit-output root** — a **single** folder shared by all stations. The skill creates the date tree inside it as `<audit-output-root>/<YYYY>/<YYYY-MM>/<YYYY-MM-DD>/` and writes every station's PDF into the same leaf folder, so the user never has to switch directories between stations. If an existing memory points to a per-station path, treat only its parent as the new root, confirm with the user once, and update the memory.
 
-Before reusing any remembered path, verify it still resolves; if not, ask once and update the memory. If the user has not answered for a given path yet, ask for it at the start of the first audit that needs it — do not proceed without it.
+Before reusing any remembered value, verify it still resolves: paths via filesystem check, Web App by issuing a token-only ping (`?token=<TOKEN>`) and confirming `{"ok":true,"ping":"bank-ledger",...}`. If anything fails, ask once and update the memory. If the user has not answered for a given input yet, ask for it at the start of the first audit that needs it — do not proceed without it.
 
 Expected daily layout: `<daily-report-root>/<station>/<YYYY-MM-DD>/…`
+
+> Migration note: the old `bank-statement folder path` memory is obsolete as of `sale-audit` v0.10.0. The `bank-ledger` Apps Script (now populating a Google Sheet from MBB / AmBank email alerts every 30 minutes) is the source of truth for clearance verification. If a stale folder-path memory exists, drop it and replace with items 2 and 3 above.
 
 ## 4. Required daily files (per station, per date)
 
@@ -88,14 +91,21 @@ Run every check. Flag every failure.
 8. **Channel tally.** Per-channel revenue in proof-of-fund must match the per-channel split in the POS systems.
 9. **CFP vs. GreenPOS voucher.** Sum of the CFP report's **voucher-usage lines only** (redemptions against pre-paid balance) must tally with the GreenPOS voucher line. CFP top-ups are deposits (§5.2) and are **excluded** from this tally — if a day's "CFP total" matches only when top-ups are included, someone has mis-classified a deposit as revenue.
 10. **Fuel quantity.** Opening fuel + deliveries − sales = closing fuel. Reconcile against the fuel quantity records and delivery orders, per product.
-11. **Funds cleared.** The bank-statement folder (§3 item 2) holds **screen-printouts of internet-banking history**, not daily statements. Each printout covers an arbitrary date range chosen by staff, so adjacent printouts **overlap** — yesterday's transactions almost always reappear inside today's printout, and the same transaction can appear in two or more files. Verify clearance accordingly:
+11. **Funds cleared.** Clearance is verified by querying the **bank-ledger Web App** (§3 items 2–3) which is fronted by the same Apps Script that ingests MBB / AmBank email alerts into the master Google Sheet every 30 minutes. The Web App returns structured JSON, so there is no OCR, no overlap, no folder coverage problem.
 
-    1. Read **every** file in the bank-statement folder — never assume "one printout per day". Treat the folder as a single pooled transaction history.
-    2. Extract all credit transactions across every file and **dedupe** them by the tuple `(account, value date, amount, transaction reference / narrative)`. A duplicate is the same transaction printed twice; count it once.
-    3. From the deduped pool, select credits whose **value date** equals the audit date (and whose destination account is one of the six listed in §2). For cheque-funded slips, also accept value dates of audit-date + 1 to +3 working days, since cheques typically clear later — flag the slip as "cleared on T+n" rather than "missing".
-    4. Match each proof-of-fund slip to one bank credit on `(account, amount, value date, reference/narrative)`. A successful match sets the slip's `Cleared✓` column to `✓`; otherwise `✗` with a one-line reason (e.g., "no matching credit", "amount mismatch RM x vs RM y", "wrong account").
-    5. Conversely, any bank credit on the audit date that **cannot** be matched to a proof-of-fund slip is an **unexplained credit** — flag it as a finding (potential undeclared revenue or misposted transfer).
-    6. If a printout's date range does not include the audit date at all (e.g., staff forgot to refresh the screen before printing), skip that file silently — but the run as a whole must still find at least one printout whose range covers the audit date, otherwise raise a finding "bank-statement coverage missing for <audit date>".
+    1. **Connectivity ping.** Before any per-slip lookup, GET `<URL>?token=<TOKEN>` (no other params). Expected response: `{"ok":true,"ping":"bank-ledger","row_count":<int>}`. If the response is missing, non-200, or `ok: false`, the ledger is **unreachable** for this run — do not abort; instead leave every slip's `Cleared✓` blank and raise §6.11-status finding `clearance verification deferred — bank-ledger Web App unreachable: <reason>`. A ping failure must never block the rest of the audit (§6 rules 1–10 still run).
+    2. **Per-slip query.** For every proof-of-fund slip, GET:
+       ```
+       <URL>?token=<TOKEN>&value_date=<YYYY-MM-DD>&account=<MBB-NNNN or AMB-NNNN>&amount=<RM>&direction=CR
+       ```
+       For cheque-funded slips, also pass `&tolerance_days=3` so the Web App searches T..T+3 instead of T only.
+    3. **Match interpretation:**
+       - `total_count == 1` → the slip cleared. Set `Cleared✓ = ✓`. Capture the matched `txn_id` and (if relevant) the `posting_date` in Notes (e.g., `cleared T+1 — txn 8a3f…`).
+       - `total_count == 0` → no match. Set `Cleared✓ = ✗` with a short reason: `no matching credit on <date>` or `amount/account mismatch`. This is a finding.
+       - `total_count > 1` → ambiguous. Set `Cleared✓ = ?` and list the candidate `txn_id`s in Notes; raise an aggregation-flag finding so the user reconciles manually. Multiple identical-amount credits to the same account on the same day usually mean two slips were grouped or one was re-issued.
+    4. **Reverse check (unexplained credits).** After processing every slip, GET `<URL>?token=<TOKEN>&value_date=<audit date>&direction=CR` (no `account` or `amount` filter) to list **every** credit that landed on the audit date. Subtract the `txn_id`s you already consumed in step 3. Anything left over is an **unexplained credit** — raise as a finding with the txn details (potential undeclared revenue or misposted transfer).
+    5. **Network failures during the slip loop.** If the Web App returns an error mid-loop, retry once with a 5-second backoff. If still failing, fall back to ping-failure behaviour for the remaining slips (set `Cleared✓` blank, finding noted), and continue the audit. Never let a single network blip kill an entire daily audit.
+    6. **No file-folder logic.** The bank-statement folder is gone. Do not look for, accept paths to, or attempt to parse PDF / image bank statements. The Web App is the only clearance source.
 12. **Fund Report aggregation integrity.** Staff sometimes sum several slips into a single Fund Report line (e.g., three cash-deposit slips reported as one "Cash deposits RMx" figure). For every Fund Report entry that aggregates more than one underlying slip, the sum of the underlying slips must equal the Fund Report line — flag any variance. Every individual slip must also appear somewhere in the Fund Report, either as its own line or as part of an aggregated line; any slip missing from the Fund Report entirely is an automatic finding (understatement). Audit always from the slips, never let the Fund Report's aggregated view suppress an individual row in the proof-of-fund table (see §7 Section 2).
 
 ## 7. Output — landscape PDF
@@ -216,7 +226,7 @@ Every audit PDF must follow the same visual grammar so any Evergreen reviewer ca
 | 1     | Station        | 站           | Station code (`TK` / `BS` / `BL`)                                                     |
 | 2     | Business date  | 业务日期     | Audited date, `YYYY-MM-DD`                                                            |
 | 3     | Prepared by    | 制作人       | Person on shift / Fund Report submitter, if known; `—` if unknown                     |
-| 4     | Bank stmts     | 银行对账单   | Folder status: `configured (N files)`, `configured (empty)`, or `not configured`      |
+| 4     | Bank ledger    | 银行账本     | Web App status: `connected (N rows)`, `unreachable: <reason>`, or `not configured`    |
 
 **Section 1 — Inflow breakdown**
 
@@ -264,7 +274,7 @@ English version:
 > **Uniq✓** slip is not a duplicate of any other proof-of-fund document (§6 r.5).
 > **Acct✓** deposit landed in one of the six approved Maybank/AmBank accounts (§2, §6 r.6).
 > **POS✓** slip's amount and channel reconcile to the POS system totals (§6 r.7–8).
-> **Cleared✓** credit confirmed in the bank-statement folder for the audited date — or T+1..T+3 for cheques (§6 r.11). Blank when verification is deferred.
+> **Cleared✓** credit confirmed in the bank-ledger Google Sheet (queried via the Apps Script Web App) for the audited date — or T+1..T+3 for cheques (§6 r.11). Blank when the ledger is unreachable.
 > **In FR** how the slip is represented in the Fund Report: `✓` individual line · `∑` part of an aggregated line · `✗` missing entirely (§6 r.12).
 
 Simplified Chinese version:
@@ -273,7 +283,7 @@ Simplified Chinese version:
 > **唯一✓** 此收据非他张证据的重复（§6 r.5）。
 > **账户✓** 款项进入§2列出的六个核准 Maybank/AmBank 账户之一（§6 r.6）。
 > **POS✓** 收据金额与渠道与 POS 系统总额相符（§6 r.7–8）。
-> **已清算✓** 银行对账单已确认款项于审核日入账，支票允许 T+1 至 T+3（§6 r.11）。延后核对时此栏留空。
+> **已清算✓** 银行账本（Google 表格 / Apps Script Web App）已确认款项于审核日入账，支票允许 T+1 至 T+3（§6 r.11）。Web App 不可达时此栏留空。
 > **在FR表** 此收据在资金报告中的呈现方式：`✓` 单独列出 · `∑` 属合并条目 · `✗` 完全缺漏（§6 r.12）。
 
 Immediately below the legend, the **FR aggregation sub-table** (only rows that aggregate): `FR line | FR amount | Underlying slips | Sum of slips | Variance`. If no aggregated FR lines exist, omit the sub-table and the section header note already says "all individual, no aggregation".
@@ -316,7 +326,7 @@ Always close with a finding for each of these statuses, even when clean (so the 
 ## 8. Workflow
 
 1. Confirm **station(s)** and **date** (default to yesterday if not given).
-2. Recall or ask for the three paths in §3 (daily-report root, bank-statement folder, audit-output root). Save any missing ones to memory on first run.
+2. Recall or ask for the four reference values in §3 (daily-report root, bank-ledger Web App URL, bank-ledger Web App token, audit-output root). Save any missing ones to memory on first run. **Ping the Web App** (token-only GET, expect `ok:true`) to populate the meta strip's "Bank ledger" status before the run continues — record the result so §6 rule 11 can reuse it without re-pinging.
 3. List files present vs. missing for that station+date.
 4. Run all §6 checks, preserving every intermediate calculation.
 5. Render **two** landscape PDFs per §7 — English and Simplified Chinese — from the same computed figures. Both PDFs must conform to the visual template in §7.1 (colours, typography, multi-column layout) and the section-by-section structure in §7.2 onwards (Sections 1, 2, 3, 4, 4b, 5, 6 in that order, with the title band + meta strip on top and the version-stamp footer on every page). Create `<audit-output-root>/<YYYY>/<YYYY-MM>/<YYYY-MM-DD>/` if it does not exist (business-date tree, shared by all stations), then save both as `<Station>-<YYYY_MM_DD>-Audit_<YYYYMMDD>_<hh>_<mm>_EN.pdf` and `…_CH.pdf`. Produce no other files.
