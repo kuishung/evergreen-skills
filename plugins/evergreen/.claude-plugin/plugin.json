@@ -1,6 +1,6 @@
 {
   "name": "evergreen",
   "description": "Evergreen operational skills — daily sale audit, AP invoice-to-Autocount import, bank-ledger Google-Sheet ingestion, and related back-office workflows for TK, BS, and BL petrol stations.",
-  "version": "0.11.0",
+  "version": "0.11.1",
   "author": { "name": "Kui Shung" }
 }

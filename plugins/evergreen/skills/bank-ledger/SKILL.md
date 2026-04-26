@@ -1,8 +1,8 @@
 ---
 name: bank-ledger
 description: Use this skill whenever the user (Evergreen back-office) wants to maintain or query the master bank-ledger Google Sheet — the canonical record of every credit and debit hitting the six approved Maybank/AmBank accounts. Triggers include "refresh bank ledger", "import bank transactions", "check ledger", "show unmatched credits", "set up bank ledger", or any task involving incoming bank transaction emails or daily bank reconciliation against the master sheet.
-version: 0.1.0
-updated: 2026-04-26 08:20
+version: 0.1.1
+updated: 2026-04-26 08:57
 ---
 
 # Bank Ledger — Evergreen Master Transaction Sheet

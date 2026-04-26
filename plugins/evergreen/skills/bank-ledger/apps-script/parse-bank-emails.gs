@@ -51,8 +51,8 @@ const BANK_RULES = [
   },
   {
     code: 'AMB',
-    senderQuery: 'from:(ambank.com.my OR amonline.com.my OR ambonline)',
-    subjectRegex: /(transaction|notification|alert|received|transfer)/i,
+    senderQuery: 'from:(ambankgroup.com OR ambank.com.my OR amonline.com.my OR ambonline)',
+    subjectRegex: /(transaction|notification|alert|received|transfer|credit|debit|paid)/i,
     parser: parseAMBEmail,
   },
 ];
