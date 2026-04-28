@@ -1,8 +1,8 @@
 ---
 name: sale-audit
 description: Use this skill whenever the user (Evergreen back-office / management) wants to audit, verify, or check the daily sale submission of a petrol station — TK (Tg. Kapor), BS (Berkat Setia), or BL (Bubul Lama). Triggers include phrases like "audit TK", "audit sale", "check BS sale", "verify fund report", "run daily audit", "daily sale audit for <date>", or any request to reconcile a station's Fund Report against its supporting documents and produce an audit PDF.
-version: 0.11.0
-updated: 2026-04-28 14:51
+version: 0.11.1
+updated: 2026-04-29 07:45
 ---
 
 # Sale Audit — Evergreen Petrol Stations
@@ -154,19 +154,27 @@ Never overwrite or delete an older file in that folder. Re-running the audit on 
 
 The renderer reads `version:` and `updated:` from this `SKILL.md`'s frontmatter and stamps `generated_at` from `datetime.now()` at run time, so all three fields are dynamic — every audit's footer reflects the actual skill release that produced it. Footer baseline sits at 3 mm above the page edge; the bottom 17 mm of every page is reserved for it.
 
-### 7.1 Render workflow
+### 7.1 Render workflow — two steps, deterministic, environment-portable
 
-1. Compute every figure required by the JSON contract in `templates/audit-data.schema.md` (sections 1, 2, 3, 4, 4b, 5, 6 plus meta strip and footer-stamp inputs).
-2. Write the JSON to a scratch path (e.g., `/tmp/<station>-<date>-audit.json`). Validate that all required fields are present.
-3. Render English:
+PDF rendering is split in two so the pipeline runs in any environment that has Python + Jinja2, regardless of whether `weasyprint` is installed:
+
+1. **JSON → HTML** via `render/render-audit.py` (Jinja2 only, zero PDF dependencies).
+2. **HTML → PDF** via the `anthropic-skills:pdf` skill (already available in every Claude environment, including sandboxed Cowork sessions where `pip install weasyprint` is blocked by network policy).
+
+Concrete sequence per audit:
+
+1. Compute every figure required by the JSON contract in `templates/audit-data.schema.md`. Write the JSON to a scratch path (e.g., `/tmp/<station>-<date>-audit.json`). Validate every required field.
+2. Render the English HTML:
    ```
-   python <skill_dir>/render/render-audit.py --data <scratch>.json --lang en --out <out>_EN.pdf
+   python <skill_dir>/render/render-audit.py --data <scratch>.json --lang en --out <scratch>_EN.html
    ```
-4. Render Chinese:
-   ```
-   python <skill_dir>/render/render-audit.py --data <scratch>.json --lang cn --out <out>_CH.pdf
-   ```
-5. Delete the scratch JSON. The PDFs are the only retained outputs.
+3. Convert that HTML to PDF by invoking `anthropic-skills:pdf` with the HTML file as input, A4 landscape, into the final output path `<Station>-<YYYY_MM_DD>-Audit_<YYYYMMDD>_<hh>_<mm>_EN.pdf`.
+4. Repeat steps 2–3 with `--lang cn` and `_CH.pdf`.
+5. Delete the scratch JSON and scratch HTML files. Only the two PDFs are retained.
+
+**Failure handling — strict.** If `render-audit.py` fails (Jinja2 missing, template missing, schema mismatch), the run **must** fail with a structured error. **Never** fall back to LLM-generated HTML, ReportLab, or any other ad-hoc rendering path — that ad-hoc path is exactly the drift the templates eliminate. The deterministic look only holds if the deterministic renderer is the only renderer.
+
+> **Why this design?** `weasyprint` is the canonical Python HTML→PDF library, but its installation requires native libraries (cairo, pango, gdk-pixbuf) which aren't pre-installed in many sandboxed environments and can't be `pip install`-ed when outbound network is restricted (this is the case in Cowork's scheduled-task sandbox). Keeping the Jinja2 substitution as one step and the PDF rasterisation as another lets the same skill produce the same byte-stable output on a developer laptop, the Win 11 server, and a sandboxed scheduled run.
 
 ### 7.2 Section content — what data each section needs
 
@@ -187,5 +195,5 @@ The renderer fills the template; the LLM's job is to produce the data values. Fo
 2. Recall or ask for the four reference values in §3 (daily-report root, bank-ledger Web App URL, bank-ledger Web App token, audit-output root). Save any missing ones to memory on first run. **Ping the Web App** (token-only GET, expect `ok:true`) to populate the meta strip's "Bank ledger" status before the run continues — record the result so §6 rule 11 can reuse it without re-pinging.
 3. List files present vs. missing for that station+date.
 4. Run all §6 checks, preserving every intermediate calculation.
-5. Build the audit-data JSON object per §7's data contract (`templates/audit-data.schema.md`). Every required field must be populated; partial data is a bug, not a degraded output. Write the JSON to a scratch path and run the renderer twice from the same JSON — once with `--lang en --out …_EN.pdf` and once with `--lang cn --out …_CH.pdf` — into `<audit-output-root>/<YYYY>/<YYYY-MM>/<YYYY-MM-DD>/<Station>-<YYYY_MM_DD>-Audit_<YYYYMMDD>_<hh>_<mm>_<Lang>.pdf`. Create the date tree if missing. Delete the scratch JSON when both PDFs are written. Produce no other files.
+5. Build the audit-data JSON object per §7's data contract (`templates/audit-data.schema.md`). Every required field must be populated; partial data is a bug, not a degraded output. Write the JSON to a scratch path. **For each language (en, cn):** run `render-audit.py --data <json> --lang <lang> --out <scratch>_<LANG>.html` to produce deterministic Jinja2-substituted HTML, then invoke `anthropic-skills:pdf` on that HTML (A4 landscape) to write `<audit-output-root>/<YYYY>/<YYYY-MM>/<YYYY-MM-DD>/<Station>-<YYYY_MM_DD>-Audit_<YYYYMMDD>_<hh>_<mm>_<Lang>.pdf`. Create the date tree if missing. Delete the scratch JSON and the scratch HTML files when both PDFs are written. Produce no other files. **If `render-audit.py` errors at any point, fail the run** — never substitute an LLM-rendered or ReportLab-rendered PDF; the visual must be byte-stable across runs.
 6. Reply in chat with the 3–5 most material findings and the absolute paths to both saved PDFs.

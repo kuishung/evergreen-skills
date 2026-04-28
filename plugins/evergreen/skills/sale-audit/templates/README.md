@@ -20,15 +20,21 @@ The renderer itself lives at `../render/render-audit.py` (one level up).
 ## How it fits together
 
 ```
-audit-data JSON  →  render-audit.py  →  fills audit.html.j2 with labels-{lang}  →  HTML or PDF
+audit-data JSON  ─┐
+                  ├─→  render-audit.py (Jinja2)  →  HTML  ─┐
+labels-{en,cn}    ─┘                                       ├─→  anthropic-skills:pdf  →  PDF
+                                                  audit.css ┘
 ```
 
-When `sale-audit` runs:
+When `sale-audit` runs (two steps per language):
 
 1. The LLM computes every figure required by `audit-data.schema.md` and writes a JSON file.
-2. `render-audit.py --data <json> --lang en --out <path>_EN.pdf` produces the English PDF.
-3. Same script with `--lang cn --out <path>_CH.pdf` produces the Chinese PDF.
-4. Same JSON in → byte-identical PDF out, every time.
+2. `render-audit.py --data <json> --lang en --out <path>_EN.html` produces the deterministic English HTML (Jinja2 substitution only — no PDF dependencies).
+3. `anthropic-skills:pdf` converts that HTML to the final PDF.
+4. Repeat steps 2–3 with `--lang cn`.
+5. Same JSON in → byte-identical HTML out → visually-stable PDF out, every time.
+
+**Why two steps?** `weasyprint` is the canonical Python HTML→PDF library but it can't be `pip install`-ed in restricted-egress sandboxes like Cowork's scheduled-task environment (network allowlist blocks PyPI). By keeping Jinja2 substitution as one step and PDF rasterisation as another, the same skill runs anywhere — laptop, Win 11 server, scheduled Cowork — without environment-specific code paths or fallbacks.
 
 ## To preview the look without running the renderer
 
@@ -39,11 +45,14 @@ Open `preview-bl-en-standalone.html` in a browser. It has the CSS inlined so it 
 ```
 pip install jinja2
 python ../render/render-audit.py --data sample-data.json --lang en --out /tmp/audit.html
-# open /tmp/audit.html in a browser
+# open /tmp/audit.html in a browser to verify the visual
 
-# Or for PDF (requires weasyprint):
-pip install weasyprint
-python ../render/render-audit.py --data sample-data.json --lang en --out /tmp/audit.pdf
+# To produce a PDF, hand the HTML off to anthropic-skills:pdf — that path
+# works everywhere, including sandboxes that block weasyprint.
+#
+# (For local convenience only, render-audit.py also supports `--out
+# <path>.pdf` directly via weasyprint — but that path is NOT what
+# sale-audit uses in production; it's a developer shortcut.)
 ```
 
 ## To change the look

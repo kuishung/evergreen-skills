@@ -2,10 +2,21 @@
 """
 Render an Evergreen sale-audit PDF deterministically.
 
+PRODUCTION FLOW (used by sale-audit, works in every environment):
+  1. Run this script with `--out <scratch>.html` to produce the
+     Jinja2-substituted HTML. Only `jinja2` is required.
+  2. Hand the resulting HTML to `anthropic-skills:pdf` for the actual
+     PDF rasterisation (A4 landscape).
+
+The two-step split is what lets the pipeline run in sandboxed
+environments (e.g., Cowork scheduled tasks) that block
+`pip install weasyprint` at the network allowlist.
+
 Inputs (all required):
-  --data        Path to audit-data JSON file (schema: see ../templates/audit-data.schema.md)
+  --data        Path to audit-data JSON file (schema: ../templates/audit-data.schema.md)
   --lang        en | cn   (which label pack to use)
-  --out         Output path; .pdf to render PDF, .html to write rendered HTML for inspection
+  --out         Output path; .html for the production flow, .pdf only as a
+                developer-local shortcut when weasyprint is available.
 
 Optional:
   --templates   Path to the templates folder (default: sibling ../templates/)
@@ -13,15 +24,17 @@ Optional:
   --skill-updated  Override the amended-date stamp (default: read from ../SKILL.md frontmatter)
 
 Examples:
-  # Render English HTML for visual inspection (no PDF deps required):
+  # PRODUCTION step 1 — JSON to HTML (only jinja2 needed):
   python render-audit.py --data ../templates/sample-data.json --lang en --out /tmp/audit.html
+  # ... then pass /tmp/audit.html to anthropic-skills:pdf to get the PDF.
 
-  # Render the matching PDF (requires `pip install weasyprint`):
+  # Developer convenience — direct PDF (requires `pip install weasyprint`,
+  # which fails in network-restricted sandboxes; do not use in production):
   python render-audit.py --data ../templates/sample-data.json --lang en --out /tmp/audit.pdf
 
 Dependencies:
-  jinja2       (always)            pip install jinja2
-  weasyprint   (PDF output only)   pip install weasyprint
+  jinja2       (always required)         pip install jinja2
+  weasyprint   (developer shortcut only) pip install weasyprint
 """
 
 import argparse
