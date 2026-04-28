@@ -183,7 +183,7 @@
     </div>
   </div>
 
-  <div class="footer-stamp">sale-audit v0.10.1 · amended 2026-04-26 21:34 · generated 2026-04-26 23:55</div>
+  <div class="footer-stamp">sale-audit v0.10.2 · amended 2026-04-28 14:35 · generated <span class="js-now">2026-04-28 14:35</span></div>
 </div>
 
 
@@ -261,7 +261,7 @@
     </tbody>
   </table>
 
-  <div class="footer-stamp">sale-audit v0.10.1 · amended 2026-04-26 21:34 · generated 2026-04-26 23:55</div>
+  <div class="footer-stamp">sale-audit v0.10.2 · amended 2026-04-28 14:35 · generated <span class="js-now">2026-04-28 14:35</span></div>
 </div>
 
 
@@ -414,8 +414,23 @@
     </li>
   </ul>
 
-  <div class="footer-stamp">sale-audit v0.10.1 · amended 2026-04-26 21:34 · generated 2026-04-26 23:55</div>
+  <div class="footer-stamp">sale-audit v0.10.2 · amended 2026-04-28 14:35 · generated <span class="js-now">2026-04-28 14:35</span></div>
 </div>
 
+<!-- Preview-only: shows that the "generated" timestamp is dynamic. The
+     real Jinja2 template (commit 2) will substitute {{ generated_at }}
+     at render time; the renderer's now-clock replaces this script. -->
+<script>
+(function () {
+  var d = new Date();
+  var pad = function (n) { return n < 10 ? '0' + n : '' + n; };
+  var stamp = d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate())
+            + ' ' + pad(d.getHours()) + ':' + pad(d.getMinutes());
+  Array.prototype.forEach.call(
+    document.querySelectorAll('.js-now'),
+    function (el) { el.textContent = stamp; }
+  );
+})();
+</script>
 </body>
 </html>

@@ -1,8 +1,8 @@
 ---
 name: sale-audit
 description: Use this skill whenever the user (Evergreen back-office / management) wants to audit, verify, or check the daily sale submission of a petrol station — TK (Tg. Kapor), BS (Berkat Setia), or BL (Bubul Lama). Triggers include phrases like "audit TK", "audit sale", "check BS sale", "verify fund report", "run daily audit", "daily sale audit for <date>", or any request to reconcile a station's Fund Report against its supporting documents and produce an audit PDF.
-version: 0.10.1
-updated: 2026-04-26 21:34
+version: 0.10.2
+updated: 2026-04-28 14:35
 ---
 
 # Sale Audit — Evergreen Petrol Stations
@@ -144,14 +144,14 @@ Read `<version>` and `<updated>` from this file's own frontmatter (the `version`
 
 **Footer positioning — strict.** The stamp must appear on **every page** of **both** the English and Chinese PDFs, tucked into a thin bottom strip, clearly below every report element. Never let it overlap a table row, chart, page number, or any body line. The bottom reserve is deliberately small (~15 mm) so the report does not leave a visible empty strip at the foot of each page.
 
-- Vertical position: baseline **2 mm from the bottom edge** of the page. Measured to the text baseline, not the top of the line.
+- Vertical position: baseline **3 mm from the bottom edge** of the page. Measured to the text baseline, not the top of the line.
 - Horizontal position: right-aligned to the content's right margin.
 - Minimum clearance: at least **10 mm of empty space** between the last content line and the top of the stamp text.
 - Size and weight: small (~7–8 pt), regular weight, muted colour (mid-grey, not black) so it does not compete with the report.
-- Implementation: render the stamp as a true page-footer region (separate from the content flow), not as a trailing paragraph inside the report body — otherwise it drifts up into content on short pages. Applying the footer via the PDF engine's page-footer / running-footer API is preferred over manual positioning so the 2 mm anchor is consistent across pages.
-- The content area must end at least ~15 mm from the bottom edge (2 mm for the footer baseline + stamp line height + 10 mm clearance). If a page lays out in a way that would push content into that zone, **reflow the content to a new page** rather than shrink the bottom margin. Content and stamp must never collide. Do not reserve more than ~15 mm at the bottom — a larger reserve leaves a visible empty strip on every page.
-- Both language PDFs use the same 2 mm anchor — positioning is identical; only the text content differs (English vs Chinese).
-- Note: 2 mm is tight against the page edge. PDFs are intended for digital review; if anyone physically prints them, most printers' unprintable bottom margin (~5 mm) may clip the stamp — that is acceptable since the stamp is for traceability of the digital file.
+- Implementation: render the stamp as a true page-footer region (separate from the content flow), not as a trailing paragraph inside the report body — otherwise it drifts up into content on short pages. Applying the footer via the PDF engine's page-footer / running-footer API is preferred over manual positioning so the 3 mm anchor is consistent across pages.
+- The content area must end at least ~17 mm from the bottom edge (3 mm for the footer baseline + stamp line height + 10 mm clearance). If a page lays out in a way that would push content into that zone, **reflow the content to a new page** rather than shrink the bottom margin. Content and stamp must never collide. Do not reserve more than ~17 mm at the bottom — a larger reserve leaves a visible empty strip on every page.
+- Both language PDFs use the same 3 mm anchor — positioning is identical; only the text content differs (English vs Chinese).
+- Note: 3 mm is close to the page edge. PDFs are intended for digital review; if anyone physically prints them, most printers' unprintable bottom margin (~5 mm) may still clip the stamp — that is acceptable since the stamp is for traceability of the digital file.
 
 ### 7.1 Visual template — match this design exactly
 
@@ -159,7 +159,7 @@ Every audit PDF must follow the same visual grammar so any Evergreen reviewer ca
 
 **Page setup**
 - A4 landscape (297 × 210 mm).
-- Margins: ~8 mm left, ~8 mm right, ~6 mm top, ~15 mm bottom reserve (footer stamp baseline at 2 mm + line height + 10 mm clearance, per the rules above).
+- Margins: ~8 mm left, ~8 mm right, ~6 mm top, ~17 mm bottom reserve (footer stamp baseline at 3 mm + line height + 10 mm clearance, per the rules above).
 - Background: very pale cream / warm off-white (`#F8F4E8` or near-equivalent).
 
 **Color palette** — use these consistently:

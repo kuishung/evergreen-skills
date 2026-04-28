@@ -48,7 +48,7 @@
 /* --- 2. Page setup -------------------------------------------------- */
 @page {
   size: A4 landscape;
-  margin: 6mm 8mm 14mm 8mm;
+  margin: 6mm 8mm 17mm 8mm;   /* 17 mm bottom reserve for the footer stamp */
 }
 
 @media print {
@@ -73,7 +73,7 @@ html, body {
 .page {
   width: 297mm;
   min-height: 210mm;
-  padding: 6mm 8mm 14mm 8mm;
+  padding: 6mm 8mm 17mm 8mm;   /* match @page bottom reserve */
   margin: 0 auto 6mm auto;
   background: var(--bg-cream);
   position: relative;
@@ -319,7 +319,7 @@ ul.findings .action-label  { font-weight: 700; }
 /* --- 13. Footer stamp ---------------------------------------------- */
 .footer-stamp {
   position: absolute;
-  bottom: 2mm;
+  bottom: 3mm;
   right: 8mm;
   font-size: var(--fs-footer);
   color: var(--footer-grey);
