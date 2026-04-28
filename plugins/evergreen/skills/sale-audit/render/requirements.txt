@@ -1,0 +1,10 @@
+# Dependencies for render-audit.py.
+#
+# Install once on whichever machine runs the audit:
+#   pip install -r requirements.txt
+#
+# weasyprint is only needed for PDF output. If you only need HTML
+# (for visual inspection), `pip install jinja2` alone is enough.
+
+jinja2>=3.0
+weasyprint>=60.0

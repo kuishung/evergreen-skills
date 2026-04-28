@@ -1,8 +1,8 @@
 ---
 name: sale-audit
 description: Use this skill whenever the user (Evergreen back-office / management) wants to audit, verify, or check the daily sale submission of a petrol station — TK (Tg. Kapor), BS (Berkat Setia), or BL (Bubul Lama). Triggers include phrases like "audit TK", "audit sale", "check BS sale", "verify fund report", "run daily audit", "daily sale audit for <date>", or any request to reconcile a station's Fund Report against its supporting documents and produce an audit PDF.
-version: 0.10.2
-updated: 2026-04-28 14:35
+version: 0.11.0
+updated: 2026-04-28 14:51
 ---
 
 # Sale Audit — Evergreen Petrol Stations
@@ -110,11 +110,28 @@ Run every check. Flag every failure.
 
 ## 7. Output — landscape PDF
 
-Use `anthropic-skills:pdf` to generate the report. **Landscape** orientation, graphical where it helps, short-form text in tables, and headers with strong contrast (dark-on-light or light-on-dark — never low-contrast pastels).
+**The visual layout is frozen in code, not prose.** Every audit PDF is rendered by the bundled deterministic renderer at `render/render-audit.py` from a single audit-data JSON object plus the templates in `templates/`. Any two runs of the renderer over the same JSON produce byte-identical PDFs. The LLM never writes HTML or CSS — it only computes the audit data.
 
-**PDFs are the only artifacts.** Do not write CSV, XLSX, HTML, or intermediate files to the audit-output folder. If any scratch file is created during the run, delete it before finishing.
+Files involved (all inside this skill folder):
 
-**Two language versions per run.** Every audit produces **two** PDFs — one English (`_EN`) and one Simplified Chinese (`_CH`). Same layout, same data, same charts, same footer stamp; only the language differs. Render both from the same computed figures so they cannot disagree. The PDF engine must use a font that covers CJK glyphs (e.g., Noto Sans CJK SC / Noto Serif CJK SC) — if the font is missing, fail loudly rather than silently output boxes.
+| Path | Purpose |
+|---|---|
+| `templates/audit.html.j2`         | Jinja2 page template — the structural layout. |
+| `templates/audit.css`             | Brand palette, typography, table styling, donut chart, footer position. |
+| `templates/labels-en.json`        | All English visible strings. |
+| `templates/labels-cn.json`        | All Simplified Chinese visible strings. |
+| `templates/sample-data.json`      | Worked example of the data contract (BL audit 2026-04-25). |
+| `templates/audit-data.schema.md`  | Documented JSON contract — the LLM's output target. |
+| `render/render-audit.py`          | The renderer. Takes JSON + lang flag, produces HTML or PDF. |
+
+**To change the look:** edit `audit.css` only. Every future audit picks up the change with no logic edits.
+**To change a label:** edit `labels-en.json` / `labels-cn.json`.
+**To change the structure (add a row, reorder a column):** edit `audit.html.j2`.
+**To translate / extend a section:** add a new label key, then reference it in the template.
+
+**PDFs are the only artifacts.** Do not write CSV, XLSX, intermediate HTML, or scratch files to the audit-output folder.
+
+**Two language versions per run.** Every audit produces **two** PDFs — one English (`_EN`), one Simplified Chinese (`_CH`) — by invoking the renderer twice from the same JSON, once with `--lang en` and once with `--lang cn`. The PDF engine must use a font covering CJK glyphs (Noto Sans CJK SC or equivalent). If the font is missing, the renderer fails loudly rather than silently emitting boxes.
 
 **File path and name.** Save each station's audit as:
 
@@ -126,202 +143,43 @@ Use `anthropic-skills:pdf` to generate the report. **Landscape** orientation, gr
 - `<YYYY_MM_DD>` — the **business date** being audited (underscores).
 - `Audit_<YYYYMMDD>_<hh>_<mm>` — the moment the audit was generated, 24-hour local time.
 - `<Lang>` — `EN` for English, `CH` for Simplified Chinese. Always produce both in the same run.
-- Both date tree folders (`<YYYY>`, `<YYYY-MM>`, `<YYYY-MM-DD>`) refer to the business date, not the generation date.
+- Both date tree folders refer to the **business date**, not the generation date.
 
-Example, one run producing two files inside `.../2026/2026-04/2026-04-22/`:
+Never overwrite or delete an older file in that folder. Re-running the audit on the same business date produces a **new** pair whose `Audit_…` timestamp differs, so every run is preserved side-by-side.
 
-- `TK-2026_04_22-Audit_20260423_14_30_EN.pdf`
-- `TK-2026_04_22-Audit_20260423_14_30_CH.pdf`
-
-Never overwrite or delete an older file in that folder. Re-running the audit for the same business date on the same day produces a **new** pair whose timestamp suffix differs, so the user can see every run side-by-side.
-
-**Footer stamp (every page, bottom-right).** Print one of the following, depending on the PDF's language:
+**Footer stamp** is rendered automatically by the template on every page, bottom-right:
 
 - English: `sale-audit v<version> · amended <updated> · generated <YYYY-MM-DD hh:mm>`
 - Chinese: `sale-audit v<version> · 修订 <updated> · 生成 <YYYY-MM-DD hh:mm>`
 
-Read `<version>` and `<updated>` from this file's own frontmatter (the `version` and `updated` fields at the top of `SKILL.md`). `<generated>` is the current timestamp at PDF-creation time. The stamp lets the user confirm the report came from the latest skill revision.
+The renderer reads `version:` and `updated:` from this `SKILL.md`'s frontmatter and stamps `generated_at` from `datetime.now()` at run time, so all three fields are dynamic — every audit's footer reflects the actual skill release that produced it. Footer baseline sits at 3 mm above the page edge; the bottom 17 mm of every page is reserved for it.
 
-**Footer positioning — strict.** The stamp must appear on **every page** of **both** the English and Chinese PDFs, tucked into a thin bottom strip, clearly below every report element. Never let it overlap a table row, chart, page number, or any body line. The bottom reserve is deliberately small (~15 mm) so the report does not leave a visible empty strip at the foot of each page.
+### 7.1 Render workflow
 
-- Vertical position: baseline **3 mm from the bottom edge** of the page. Measured to the text baseline, not the top of the line.
-- Horizontal position: right-aligned to the content's right margin.
-- Minimum clearance: at least **10 mm of empty space** between the last content line and the top of the stamp text.
-- Size and weight: small (~7–8 pt), regular weight, muted colour (mid-grey, not black) so it does not compete with the report.
-- Implementation: render the stamp as a true page-footer region (separate from the content flow), not as a trailing paragraph inside the report body — otherwise it drifts up into content on short pages. Applying the footer via the PDF engine's page-footer / running-footer API is preferred over manual positioning so the 3 mm anchor is consistent across pages.
-- The content area must end at least ~17 mm from the bottom edge (3 mm for the footer baseline + stamp line height + 10 mm clearance). If a page lays out in a way that would push content into that zone, **reflow the content to a new page** rather than shrink the bottom margin. Content and stamp must never collide. Do not reserve more than ~17 mm at the bottom — a larger reserve leaves a visible empty strip on every page.
-- Both language PDFs use the same 3 mm anchor — positioning is identical; only the text content differs (English vs Chinese).
-- Note: 3 mm is close to the page edge. PDFs are intended for digital review; if anyone physically prints them, most printers' unprintable bottom margin (~5 mm) may still clip the stamp — that is acceptable since the stamp is for traceability of the digital file.
+1. Compute every figure required by the JSON contract in `templates/audit-data.schema.md` (sections 1, 2, 3, 4, 4b, 5, 6 plus meta strip and footer-stamp inputs).
+2. Write the JSON to a scratch path (e.g., `/tmp/<station>-<date>-audit.json`). Validate that all required fields are present.
+3. Render English:
+   ```
+   python <skill_dir>/render/render-audit.py --data <scratch>.json --lang en --out <out>_EN.pdf
+   ```
+4. Render Chinese:
+   ```
+   python <skill_dir>/render/render-audit.py --data <scratch>.json --lang cn --out <out>_CH.pdf
+   ```
+5. Delete the scratch JSON. The PDFs are the only retained outputs.
 
-### 7.1 Visual template — match this design exactly
+### 7.2 Section content — what data each section needs
 
-Every audit PDF must follow the same visual grammar so any Evergreen reviewer can read any audit at a glance. **Reference layout: the BL audit generated at `2026-04-24 23:59` (`BL-2026_04_23-Audit_20260424_23_59_EN.pdf`).** The user has confirmed that PDF as the canonical template. Match its structure — page anatomy, multi-column splits, palette, typography, and decoration — on every future run, EN and CH alike.
+The renderer fills the template; the LLM's job is to produce the data values. For every section, populate every field documented in `audit-data.schema.md`. Notes that are content-level (not structural):
 
-**Page setup**
-- A4 landscape (297 × 210 mm).
-- Margins: ~8 mm left, ~8 mm right, ~6 mm top, ~17 mm bottom reserve (footer stamp baseline at 3 mm + line height + 10 mm clearance, per the rules above).
-- Background: very pale cream / warm off-white (`#F8F4E8` or near-equivalent).
-
-**Color palette** — use these consistently:
-
-| Use                                          | Hex (or near-equivalent) |
-|----------------------------------------------|--------------------------|
-| Primary brand band; dark accent panels       | `#0E5D3F` deep forest green |
-| Section header band background               | `#BFDFC8` light pastel green |
-| Warning / "not revenue" callout background   | `#FFF3CC` soft yellow |
-| Warning / "not revenue" callout border       | `#E0A030` amber |
-| Variance / negative figure                   | `#D72E2E` red |
-| Footer stamp text                            | `#7A7A7A` mid-grey |
-| Body text                                    | `#1A1A1A` near-black |
-| Muted text / captions                        | `#5A5A5A` charcoal |
-| Pie slice — Cash                             | `#D9A23B` mustard |
-| Pie slice — Merchant                         | `#9CB6A6` sage |
-| Pie slice — CFP voucher used                 | `#264E3F` deep teal-green |
-| Pie slice — BUDI95                           | `#B65A28` burnt orange |
-
-**Typography**
-- Sans-serif throughout. EN: system Inter / Helvetica / Arial fallback. CH: Noto Sans CJK SC.
-- Headline panel numbers: bold, ~24–28 pt.
-- Section header band text: bold, ~11–12 pt; near-black on light green, **or** white on dark green.
-- Table column headers: bold, ~10 pt, white on dark green (`#0E5D3F`).
-- Body / table cells: regular, ~9–10 pt.
-- Footer stamp: regular, ~7–8 pt, mid-grey (per the rules above).
-
-**Element styles**
-- **Section header bands** — full-width strip ~7–8 mm tall, light-green background, bold dark text aligned ~8 mm from the left edge. Every section starts with one.
-- **Cards** — 1 px solid border in dark green, ~5–6 mm internal padding, white card background. Optional header row in dark green with white text (e.g., "Revenue — RM xx,xxx.xx").
-- **Tables** — dark-green header row with white text; body rows alternating white / very-faint-green; bold "Total" row at the bottom; right-align all numeric columns; ~9–10 pt body.
-- **Headline panel** — full-width dark-green band; three big white callout numbers separated by `=` and `+` glyphs, with small white captions above each amount.
-- **Alert card** — amber border + soft-yellow fill + leading ⚠ icon. Used **only** for the CFP Deposit block and other "not revenue / pending" notices (e.g., the deferred-clearance strip in Section 2).
-- **Pie chart** — flat 2D pie (not donut); legend on the right showing channel name + percent.
-- **Inline share bars** — thin coloured bars rendered inside a table cell, width = share %; used in the segment table of Section 1.
-
-**Multi-column layout map**
-
-| Block                                                         | Width split |
-|---------------------------------------------------------------|-------------|
-| Top title band + meta strip                                   | Full width  |
-| Section 1 headline panel                                      | Full width  |
-| Section 1: Revenue card  /  CFP Deposit alert card            | ~65% / ~35% |
-| Section 1: Channel-totals table  /  By-channel pie chart      | ~70% / ~30% |
-| Section 2 (proof-of-fund table + FR aggregation sub-table)    | Full width  |
-| Section 3 Cash highlight  /  Section 4 Fuel quantity          | ~50% / ~50% |
-| Section 4b POS tally                                          | Right ~50%, beneath Section 4 |
-| Section 5 §4 checklist                                        | Full width  |
-| Section 6 Findings & recommendations                          | Full width  |
-
-### 7.2 Top-of-page header
-
-**Title band** — full width, dark-green (`#0E5D3F`) background, ~12–14 mm tall, white bold text. Format:
-
-- English: `<STATION-NAME> (<CODE>) — DAILY SALE AUDIT · <YYYY-MM-DD>`
-- Chinese: `<中文站名> (<CODE>) — 每日销售审计 · <YYYY-MM-DD>`
-
-(For example: `BUBUL LAMA (BL) — DAILY SALE AUDIT · 2026-04-23`.)
-
-**Meta strip** — immediately below the title band, light-grey background, ~7–8 mm tall, with bold labels and regular-weight values, separated by ample whitespace. Fields, in order:
-
-| Order | Label (EN)     | Label (CH)  | Value                                                                                 |
-|-------|----------------|-------------|---------------------------------------------------------------------------------------|
-| 1     | Station        | 站           | Station code (`TK` / `BS` / `BL`)                                                     |
-| 2     | Business date  | 业务日期     | Audited date, `YYYY-MM-DD`                                                            |
-| 3     | Prepared by    | 制作人       | Person on shift / Fund Report submitter, if known; `—` if unknown                     |
-| 4     | Bank ledger    | 银行账本     | Web App status: `connected (N rows)`, `unreachable: <reason>`, or `not configured`    |
-
-**Section 1 — Inflow breakdown**
-
-Layout:
-
-1. **Headline panel** (full-width dark-green band, white text), three columns side-by-side:
-   - "Total Inflow"  →  large bold figure (e.g., `RM 68,243.21`)
-   - "= Revenue"     →  large bold figure
-   - "+ CFP Deposit (non-revenue)"  →  large bold figure
-
-   One small caption beneath the panel: `Total Inflow = Revenue + CFP Deposit (non-revenue)`.
-
-2. **Revenue card** (left ~65 %), dark-green border, header row "Revenue — RM <total>". Inside:
-   - Segment table — columns `Segment | RM | Share`. Rows: `Fuel`, `Buraqmart`, `Rental / iBing` (or station-equivalent), bold `Total` row at the bottom. The `Share` column renders an inline horizontal bar whose width equals the segment's share percentage, with the percentage label.
-   - One italic footer line, ~9 pt, summarising fuel volume × price (e.g., `Petrol 9,840.43 L × RM 3.87; Diesel 2,946.30 L × RM 2.15.`) plus, on its own clause, the BUDI95 claimable amount (e.g., `BUDI95 claimable RM 11,552.40.`). If a fuel delivery occurred, append `Fuel delivery today.`
-
-3. **CFP Deposit alert card** (right ~35 %), amber border + soft-yellow fill + ⚠ icon. Header `CFP Deposit — not revenue`. Inside:
-   - Big bold amount (e.g., `RM 23,724.00`).
-   - One-line caption (e.g., `All cash — zero bank transfer to PetrolFox today.`).
-   - Sub-table — columns `Sub | Amt | #`. Rows: `Cash top-up`, `Bank transfer top-up`, bold `Total` row.
-
-4. **Revenue — channel totals from slips** (left ~70 %, below the two cards). Table with columns `Channel | RM | # slips | % | Notes`. Rows: `Cash`, `Merchant`, `CFP voucher used`, `BUDI95 (full pump price)`, bold `Total` row. The four channels must always appear even if zero for the day. The Notes column carries one short clarification per channel — for BUDI95, split customer-paid portion vs. IPTB-claimable portion.
-
-5. **By channel pie chart** (right ~30 %, beside the channel-totals table). Flat 2D pie, four slices in the palette colours above, legend on the right showing channel name + percent.
-
-**Section 2 — Proof-of-fund**
-
-Section header band: `Section 2 — Proof-of-fund (<N> slips · <aggregation note>)` — e.g., `(23 slips · all individual, no aggregation)`.
-
-If clearance verification is deferred (e.g., bank-statement coverage missing per §6 rule 11), insert an amber/yellow alert strip immediately under the header summarising why the `Cleared✓` column is blank and citing `§6.11 deferred`.
-
-Optional one-paragraph note then summarises recurring Fund-Report exceptions (e.g., persistent doc-number bugs) and confirms the §6.12 aggregation status.
-
-Then the **proof-of-fund table**, full-width, **one row per individual slip**:
-
-| Doc | Type | Amt (RM) | Date✓ | Uniq✓ | Acct✓ | POS✓ | Cleared✓ | In FR | Notes |
-
-`In FR` values: `✓` individual · `∑` part of an aggregated FR line · `✗` missing. Tick / cross per criterion, one-line note on failures.
-
-**Column key (legend)** — render this **inside the PDF**, immediately under the proof-of-fund table, as a small light-grey caption strip in ~8 pt regular text so any reviewer can read the columns without leaving the report. Match the language of the PDF.
-
-English version:
-
-> **Date✓** slip's printed date matches the audited business date (§6 r.4).
-> **Uniq✓** slip is not a duplicate of any other proof-of-fund document (§6 r.5).
-> **Acct✓** deposit landed in one of the six approved Maybank/AmBank accounts (§2, §6 r.6).
-> **POS✓** slip's amount and channel reconcile to the POS system totals (§6 r.7–8).
-> **Cleared✓** credit confirmed in the bank-ledger Google Sheet (queried via the Apps Script Web App) for the audited date — or T+1..T+3 for cheques (§6 r.11). Blank when the ledger is unreachable.
-> **In FR** how the slip is represented in the Fund Report: `✓` individual line · `∑` part of an aggregated line · `✗` missing entirely (§6 r.12).
-
-Simplified Chinese version:
-
-> **日期✓** 收据日期与审核业务日期相符（§6 r.4）。
-> **唯一✓** 此收据非他张证据的重复（§6 r.5）。
-> **账户✓** 款项进入§2列出的六个核准 Maybank/AmBank 账户之一（§6 r.6）。
-> **POS✓** 收据金额与渠道与 POS 系统总额相符（§6 r.7–8）。
-> **已清算✓** 银行账本（Google 表格 / Apps Script Web App）已确认款项于审核日入账，支票允许 T+1 至 T+3（§6 r.11）。Web App 不可达时此栏留空。
-> **在FR表** 此收据在资金报告中的呈现方式：`✓` 单独列出 · `∑` 属合并条目 · `✗` 完全缺漏（§6 r.12）。
-
-Immediately below the legend, the **FR aggregation sub-table** (only rows that aggregate): `FR line | FR amount | Underlying slips | Sum of slips | Variance`. If no aggregated FR lines exist, omit the sub-table and the section header note already says "all individual, no aggregation".
-
-**Section 3 — Cash highlight** (left ~50 %)
-
-Table with columns `Item | FR | Computed | Var`. Rows in this order: `Opening cash`, `Cash revenue`, `CFP cash top-up`, `CDM deposited`, `Safeguards pick-up`, **bold** `Closing cash` (red if any variance, with the variance figure shown in the `Var` column; otherwise green tick or em-dash).
-
-**Section 4 — Fuel quantity** (right ~50 %)
-
-Table with columns `Product | Open | Deliv. | Sales (L) | Close | Var`. One row per fuel product (e.g., `Petrol`, `Diesel`). When a delivery occurred, the `Deliv.` cell shows `DELIV` (with the volume in the line below or in the body as appropriate). Highlight any non-zero `Var` in red.
-
-**Section 4b — POS tally** (right ~50 %, beneath Section 4)
-
-Table with columns `Check | POS | FR | Result`. Rows include at minimum:
-- `GreenPOS fuel`
-- `CFP vs PetrolFox`
-- `Merchant fuel`
-- `Autocount` (Buraqmart Autocount POS)
-- additional system-reconciliation rows where available.
-
-`Result` column shows `✓`, `✓ Verified`, or `✗ <variance description>`.
-
-**Section 5 — §4 checklist**
-
-Single-paragraph file-presence summary referencing §4 of this skill (Required daily files). Format:
-
-`Present: <list>. Partial: <list>. Missing: <list>. N/A: <list>.`
-
-**Section 6 — Findings & recommendations**
-
-Bulleted list. One bullet per finding, ordered by materiality (financial impact first, control weakness second, presentation/data-quality issues last). Each bullet follows this exact form:
-
-`FINDING <N> — <bold short title>.` Then a body sentence. End with `Action:` (also bold) followed by the concrete management action.
-
-Always close with a finding for each of these statuses, even when clean (so the reader can confirm the check ran):
-- `§6.11` — clearance verification status (verified / deferred + reason).
-- `§6.12` — aggregation integrity status (clean / variances flagged).
+- **Section 1 inflow breakdown.** Three headline figures — Total Inflow, Revenue, CFP Deposit — must always reconcile (Total = Revenue + CFP Deposit). The four revenue channels (Cash, Merchant, CFP voucher used, BUDI95) must always appear even if zero. For BUDI95 the `notes` field must split customer-paid portion vs. IPTB-claimable portion.
+- **Section 1 fuel-delivery callout.** When a fuel delivery occurred, set `delivery.occurred = true` and put invoice / ticket / SN in `delivery.summary`. Otherwise omit the object or set `occurred = false`.
+- **Section 2 proof-of-fund.** **One row per individual slip** — never collapse multiple slips into a single row even when the Fund Report aggregates them. `cleared.kind` is one of `verified` / `deferred` / `missing`. `in_fr` is `ok` / `agg` / `missing`. The column-key legend is rendered automatically by the template using strings from `labels-{en,cn}.json`. The FR-aggregation sub-table is omitted when `fr_aggregation` is empty.
+- **Section 3 cash highlight.** Six rows in this order: Opening cash, Cash revenue (POS), CFP cash top-up, BuraqMart cash, Safeguards (CDM) pick-up, Closing cash. Set `is_total: true` on Closing cash; set `is_variance: true` on any row where `var != 0`. The optional `footer_note` is free text below the table for context (e.g., explaining a misposted FR cell).
+- **Section 4 fuel quantity.** One row per fuel product. The L-fields are pre-formatted strings (`"17,176"`, `"DELIV 16,500"`) so qualifiers like `*` or `DELIV` come through verbatim.
+- **Section 4b POS tally.** Each row sets `passed: true | false`; the renderer paints failed rows red and styles the result text accordingly. Include at minimum: GreenPOS fuel total, CFP voucher vs GreenPOS, Merchant fuel, Autocount Mart, BUDI95 sales (POS).
+- **Section 5 §4 checklist.** Single HTML string (`<strong>` allowed for `Present:` / `Partial:` / `Missing:` / `N/A:` keywords) referencing the file list in §4.
+- **Section 6 findings.** Ordered by materiality (financial impact first, control weakness second, presentation issues last). **Always include a closing finding for each of `§6.11` (clearance status) and `§6.12` (aggregation integrity)**, even when clean — so the reader can confirm those checks ran.
 
 ## 8. Workflow
 
@@ -329,5 +187,5 @@ Always close with a finding for each of these statuses, even when clean (so the 
 2. Recall or ask for the four reference values in §3 (daily-report root, bank-ledger Web App URL, bank-ledger Web App token, audit-output root). Save any missing ones to memory on first run. **Ping the Web App** (token-only GET, expect `ok:true`) to populate the meta strip's "Bank ledger" status before the run continues — record the result so §6 rule 11 can reuse it without re-pinging.
 3. List files present vs. missing for that station+date.
 4. Run all §6 checks, preserving every intermediate calculation.
-5. Render **two** landscape PDFs per §7 — English and Simplified Chinese — from the same computed figures. Both PDFs must conform to the visual template in §7.1 (colours, typography, multi-column layout) and the section-by-section structure in §7.2 onwards (Sections 1, 2, 3, 4, 4b, 5, 6 in that order, with the title band + meta strip on top and the version-stamp footer on every page). Create `<audit-output-root>/<YYYY>/<YYYY-MM>/<YYYY-MM-DD>/` if it does not exist (business-date tree, shared by all stations), then save both as `<Station>-<YYYY_MM_DD>-Audit_<YYYYMMDD>_<hh>_<mm>_EN.pdf` and `…_CH.pdf`. Produce no other files.
+5. Build the audit-data JSON object per §7's data contract (`templates/audit-data.schema.md`). Every required field must be populated; partial data is a bug, not a degraded output. Write the JSON to a scratch path and run the renderer twice from the same JSON — once with `--lang en --out …_EN.pdf` and once with `--lang cn --out …_CH.pdf` — into `<audit-output-root>/<YYYY>/<YYYY-MM>/<YYYY-MM-DD>/<Station>-<YYYY_MM_DD>-Audit_<YYYYMMDD>_<hh>_<mm>_<Lang>.pdf`. Create the date tree if missing. Delete the scratch JSON when both PDFs are written. Produce no other files.
 6. Reply in chat with the 3–5 most material findings and the absolute paths to both saved PDFs.

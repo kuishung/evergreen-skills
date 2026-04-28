@@ -1,0 +1,106 @@
+{
+  "title_suffix": "— DAILY SALE AUDIT ·",
+  "total": "Total",
+  "delivery_today": "Fuel delivery occurred today",
+
+  "meta": {
+    "station": "Station",
+    "business_date": "Business date",
+    "prepared_by": "Prepared by",
+    "fund_report": "Fund Report",
+    "bank_stmts": "Bank stmts"
+  },
+
+  "section_1": {
+    "title": "Section 1 — Inflow breakdown",
+    "total_inflow": "Total Inflow",
+    "equals_revenue": "= Revenue",
+    "plus_cfp_deposit": "+ CFP Deposit (non-revenue)",
+    "caption": "Total Inflow = Revenue + CFP Deposit (non-revenue).",
+    "revenue_card_header": "Revenue",
+    "cfp_card_header": "CFP Deposit — not revenue",
+    "channels_table_header": "Revenue — channel totals from slips/POS",
+    "by_channel": "By channel",
+    "col_segment": "Segment",
+    "col_rm": "RM",
+    "col_share": "Share",
+    "col_subchannel": "Sub-channel",
+    "col_amt": "Amt",
+    "col_count": "#",
+    "col_channel": "Channel",
+    "col_total_rm": "Total (RM)",
+    "col_slips": "# slips",
+    "col_pct_rev": "% rev",
+    "col_notes": "Notes"
+  },
+
+  "section_2": {
+    "title": "Section 2 — Proof-of-fund",
+    "fr_agg_title": "FR aggregation check",
+    "col_doc": "Doc",
+    "col_type": "Type",
+    "col_amt": "Amt (RM)",
+    "col_date": "Date✓",
+    "col_uniq": "Uniq✓",
+    "col_acct": "Acct✓",
+    "col_pos": "POS✓",
+    "col_cleared": "Cleared✓",
+    "col_in_fr": "In FR",
+    "col_notes": "Notes",
+    "col_fr_line": "FR line",
+    "col_fr_amount": "FR amount",
+    "col_sum_slips": "Sum of slips",
+    "col_variance": "Variance",
+    "col_status": "Status"
+  },
+
+  "legend": {
+    "date": "slip's printed date matches the audited business date (§6 r.4).",
+    "uniq": "slip is not a duplicate (§6 r.5).",
+    "acct": "deposit landed in one of the six approved Maybank/AmBank accounts (§2, §6 r.6).",
+    "pos": "slip's amount and channel reconcile to the POS system totals (§6 r.7–8).",
+    "cleared": "credit confirmed in the bank-ledger Google Sheet for the audited date (T+1..T+3 for cheques) — §6 r.11. Blank when verification is deferred.",
+    "in_fr": "✓ individual / ∑ aggregated / ✗ missing (§6 r.12)."
+  },
+
+  "section_3": {
+    "title": "Section 3 — Cash highlight",
+    "col_item": "Item",
+    "col_fr": "FR",
+    "col_computed": "Computed",
+    "col_var": "Var"
+  },
+
+  "section_4": {
+    "title": "Section 4 — Fuel quantity",
+    "col_product": "Product",
+    "col_open": "Open (L)",
+    "col_deliv": "Deliv. (L)",
+    "col_sales": "Sales (L)",
+    "col_close": "Close (L)",
+    "col_var": "Var"
+  },
+
+  "section_4b": {
+    "title": "Section 4b — POS tally",
+    "col_check": "Check",
+    "col_pos": "POS",
+    "col_fr": "FR",
+    "col_result": "Result"
+  },
+
+  "section_5": {
+    "title": "Section 5 — §4 checklist"
+  },
+
+  "section_6": {
+    "title": "Section 6 — Findings & recommendations",
+    "finding_prefix": "FINDING",
+    "action_label": "Action:"
+  },
+
+  "footer": {
+    "amended": "amended",
+    "generated": "generated"
+  }
+}

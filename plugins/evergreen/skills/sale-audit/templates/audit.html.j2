@@ -1,0 +1,400 @@
+{# ───────────────────────────────────────────────────────────────────
+   Evergreen Sale Audit — Jinja2 template
+   Renders one PDF per language pack from a single audit-data JSON.
+   Schema: see audit-data.schema.md.
+   ─────────────────────────────────────────────────────────────────── #}
+{%- macro tick(ok) -%}
+<span class="tickbox{% if not ok %} x{% endif %}">{% if ok %}✓{% else %}✗{% endif %}</span>
+{%- endmacro -%}
+
+{%- macro money(v) -%}
+{%- if v is none -%}—{%- else -%}{{ '{:,.2f}'.format(v) }}{%- endif -%}
+{%- endmacro -%}
+
+{%- macro pct(v) -%}
+{%- if v is none -%}—{%- else -%}{{ '{:.1f}%'.format(v) }}{%- endif -%}
+{%- endmacro -%}
+
+{%- macro varcell(v) -%}
+{%- if v is none -%}<span class="muted">—</span>
+{%- else -%}{{ '{:+,.2f}'.format(v) | replace('+', '+') if v > 0 else '{:,.2f}'.format(v) }}
+{%- endif -%}
+{%- endmacro -%}
+
+{%- macro in_fr_cell(kind) -%}
+{%- if kind == 'ok' -%}<span class="tickbox">✓</span>
+{%- elif kind == 'agg' -%}∑
+{%- else -%}<span class="tickbox x">✗</span>
+{%- endif -%}
+{%- endmacro -%}
+
+{%- macro cleared_cell(c) -%}
+{%- if c.kind == 'missing' -%}<span class="tickbox x">{{ c.text }}</span>
+{%- elif c.kind == 'verified' -%}<span class="tickbox">{{ c.text }}</span>
+{%- else -%}{{ c.text }}
+{%- endif -%}
+{%- endmacro -%}
+
+{%- macro pos_result(row) -%}
+{%- if row.passed -%}<span class="tickbox">{{ row.result }}</span>
+{%- else -%}<span class="tickbox x">{{ row.result }}</span>
+{%- endif -%}
+{%- endmacro -%}
+<!DOCTYPE html>
+<html lang="{{ data.language|default('en') }}">
+<head>
+<meta charset="utf-8">
+<title>{{ data.station.code }} {{ labels.title_suffix }} {{ data.business_date }}</title>
+<link rel="stylesheet" href="audit.css">
+</head>
+<body>
+
+{# ════════════════════════════════ PAGE 1 ════════════════════════════════ #}
+<div class="page page-break">
+
+  <h1 class="title-band">{{ data.station.name_long }} ({{ data.station.code }}) {{ labels.title_suffix }} {{ data.business_date }}</h1>
+
+  <div class="meta-strip">
+    <span><span class="meta-label">{{ labels.meta.station }}:</span><span class="meta-value">{{ data.station.code }}</span></span>
+    <span><span class="meta-label">{{ labels.meta.business_date }}:</span><span class="meta-value">{{ data.business_date }}</span></span>
+    <span><span class="meta-label">{{ labels.meta.prepared_by }}:</span><span class="meta-value">{{ data.meta.prepared_by }}</span></span>
+    <span><span class="meta-label">{{ labels.meta.fund_report }}:</span><span class="meta-value">{{ data.meta.fund_report_status }}</span></span>
+    <span><span class="meta-label">{{ labels.meta.bank_stmts }}:</span><span class="meta-value">{{ data.meta.bank_stmts_status }}</span></span>
+  </div>
+
+  {% if data.delivery and data.delivery.occurred %}
+  <div class="callout">
+    <strong>{{ labels.delivery_today }}</strong> — {{ data.delivery.summary }}
+  </div>
+  {% endif %}
+
+  <h2 class="section-band">{{ labels.section_1.title }}</h2>
+
+  <div class="headline-panel">
+    <div>
+      <div class="h-label">{{ labels.section_1.total_inflow }}</div>
+      <div class="h-amount">RM {{ money(data.inflow.total) }}</div>
+    </div>
+    <div>
+      <div class="h-label">{{ labels.section_1.equals_revenue }}</div>
+      <div class="h-amount">RM {{ money(data.inflow.revenue) }}</div>
+    </div>
+    <div>
+      <div class="h-label">{{ labels.section_1.plus_cfp_deposit }}</div>
+      <div class="h-amount">RM {{ money(data.inflow.cfp_deposit) }}</div>
+    </div>
+  </div>
+  <div class="headline-caption">{{ labels.section_1.caption }}</div>
+
+  <div class="card-row">
+
+    <div class="card">
+      <div class="card-header">{{ labels.section_1.revenue_card_header }} — RM {{ money(data.revenue.total) }}</div>
+      <div class="card-body">
+        <table class="audit">
+          <thead>
+            <tr>
+              <th>{{ labels.section_1.col_segment }}</th>
+              <th class="num">{{ labels.section_1.col_rm }}</th>
+              <th>{{ labels.section_1.col_share }}</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for seg in data.revenue.segments %}
+            <tr>
+              <td>{{ seg.name }}</td>
+              <td class="num">{{ money(seg.amount) }}</td>
+              <td>
+                <div class="share-cell">
+                  <div class="share-track"><div class="share-fill" style="width: {{ seg.share_pct }}%;"></div></div>
+                  <span class="share-pct">{{ pct(seg.share_pct) }}</span>
+                </div>
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+          <tfoot>
+            <tr class="total"><td>{{ labels.total }}</td><td class="num">{{ money(data.revenue.total) }}</td><td></td></tr>
+          </tfoot>
+        </table>
+      </div>
+      {% if data.revenue.footer_note %}
+      <div class="card-footer-note">{{ data.revenue.footer_note }}</div>
+      {% endif %}
+    </div>
+
+    <div class="card alert">
+      <div class="card-header"><span class="icon">⚠</span> {{ labels.section_1.cfp_card_header }}</div>
+      <div class="card-body">
+        <div class="big-amount">RM {{ money(data.cfp_deposit.total) }}</div>
+        {% if data.cfp_deposit.subtitle %}
+        <div class="alert-caption">{{ data.cfp_deposit.subtitle }}</div>
+        {% endif %}
+        <table class="audit">
+          <thead>
+            <tr>
+              <th>{{ labels.section_1.col_subchannel }}</th>
+              <th class="num">{{ labels.section_1.col_amt }}</th>
+              <th class="num">{{ labels.section_1.col_count }}</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for sc in data.cfp_deposit.subchannels %}
+            <tr><td>{{ sc.name }}</td><td class="num">{{ money(sc.amount) }}</td><td class="num">{{ sc.count }}</td></tr>
+            {% endfor %}
+          </tbody>
+          <tfoot>
+            <tr class="total"><td>{{ labels.total }}</td><td class="num">{{ money(data.cfp_deposit.subchannels_total.amount) }}</td><td class="num">{{ data.cfp_deposit.subchannels_total.count }}</td></tr>
+          </tfoot>
+        </table>
+      </div>
+    </div>
+
+  </div>
+
+  <div class="channels-row">
+    <div>
+      <div class="card-header" style="background:transparent;border:none;padding:0 0 1mm 0;">
+        {{ labels.section_1.channels_table_header }}
+      </div>
+      <table class="audit">
+        <thead>
+          <tr>
+            <th>{{ labels.section_1.col_channel }}</th>
+            <th class="num">{{ labels.section_1.col_total_rm }}</th>
+            <th class="num">{{ labels.section_1.col_slips }}</th>
+            <th class="num">{{ labels.section_1.col_pct_rev }}</th>
+            <th>{{ labels.section_1.col_notes }}</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for ch in data.revenue.channels %}
+          <tr>
+            <td>{{ ch.name }}</td>
+            <td class="num">{{ money(ch.amount) }}</td>
+            <td class="num">{{ ch.slips_text|default(ch.slips_count) }}</td>
+            <td class="num">{{ pct(ch.pct_revenue) }}</td>
+            <td>{{ ch.notes }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+        <tfoot>
+          <tr class="total">
+            <td>{{ labels.total }}</td>
+            <td class="num">{{ money(data.revenue.channels_total.amount) }}</td>
+            <td class="num">{{ data.revenue.channels_total.slips_count }}</td>
+            <td class="num">{{ pct(data.revenue.channels_total.pct_revenue) }}</td>
+            <td></td>
+          </tr>
+        </tfoot>
+      </table>
+    </div>
+
+    <div class="donut-wrap">
+      <div class="donut-title">{{ labels.section_1.by_channel }}</div>
+      {% set ns = namespace(start=0) %}
+      {% set angles = [] %}
+      {% for s in data.donut_slices %}
+        {% set _ = angles.append({'color_var': s.color_var, 'start': ns.start, 'end': ns.start + (s.pct * 3.6)}) %}
+        {% set ns.start = ns.start + (s.pct * 3.6) %}
+      {% endfor %}
+      <div class="donut" style="background: conic-gradient({% for a in angles %}var({{ a.color_var }}) {{ '%.2f'|format(a.start) }}deg {{ '%.2f'|format(a.end) }}deg{% if not loop.last %}, {% endif %}{% endfor %});"></div>
+      <div class="donut-legend">
+        {% for s in data.donut_slices %}
+        <div><span class="swatch" style="background:var({{ s.color_var }});"></span>{{ s.label }} {{ pct(s.pct) }}</div>
+        {% endfor %}
+      </div>
+    </div>
+  </div>
+
+  <div class="footer-stamp">sale-audit v{{ data.skill_version }} · {{ labels.footer.amended }} {{ data.skill_updated }} · {{ labels.footer.generated }} {{ data.generated_at }}</div>
+</div>
+
+
+{# ════════════════════════════════ PAGE 2 ════════════════════════════════ #}
+<div class="page page-break">
+
+  <h2 class="section-band">{{ labels.section_2.title }} ({{ data.section_2.subtitle }})</h2>
+
+  {% if data.section_2.deferred_note %}
+  <div class="callout">{{ data.section_2.deferred_note }}</div>
+  {% endif %}
+
+  <table class="audit">
+    <thead>
+      <tr>
+        <th>{{ labels.section_2.col_doc }}</th>
+        <th>{{ labels.section_2.col_type }}</th>
+        <th class="num">{{ labels.section_2.col_amt }}</th>
+        <th class="center">{{ labels.section_2.col_date }}</th>
+        <th class="center">{{ labels.section_2.col_uniq }}</th>
+        <th>{{ labels.section_2.col_acct }}</th>
+        <th class="center">{{ labels.section_2.col_pos }}</th>
+        <th>{{ labels.section_2.col_cleared }}</th>
+        <th class="center">{{ labels.section_2.col_in_fr }}</th>
+        <th>{{ labels.section_2.col_notes }}</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for slip in data.section_2.slips %}
+      <tr>
+        <td>{{ slip.doc }}</td>
+        <td>{{ slip.type }}</td>
+        <td class="num">{{ money(slip.amount) }}</td>
+        <td class="center">{{ tick(slip.date_ok) }}</td>
+        <td class="center">{{ tick(slip.uniq_ok) }}</td>
+        <td>{{ slip.acct }}</td>
+        <td class="center">{% if slip.pos_ok is none %}<span class="muted">n/a</span>{% else %}{{ tick(slip.pos_ok) }}{% endif %}</td>
+        <td>{{ cleared_cell(slip.cleared) }}</td>
+        <td class="center">{{ in_fr_cell(slip.in_fr) }}</td>
+        <td>{{ slip.notes|safe }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+
+  <div class="legend">
+    <strong>{{ labels.section_2.col_date }}</strong> {{ labels.legend.date }}&nbsp;
+    <strong>{{ labels.section_2.col_uniq }}</strong> {{ labels.legend.uniq }}&nbsp;
+    <strong>{{ labels.section_2.col_acct }}</strong> {{ labels.legend.acct }}&nbsp;
+    <strong>{{ labels.section_2.col_pos }}</strong> {{ labels.legend.pos }}&nbsp;
+    <strong>{{ labels.section_2.col_cleared }}</strong> {{ labels.legend.cleared }}&nbsp;
+    <strong>{{ labels.section_2.col_in_fr }}</strong> {{ labels.legend.in_fr }}
+  </div>
+
+  {% if data.section_2.fr_aggregation %}
+  <h3 style="font-size:10pt;font-weight:700;margin:3mm 0 1mm 0;">{{ labels.section_2.fr_agg_title }}</h3>
+  <table class="audit">
+    <thead>
+      <tr>
+        <th>{{ labels.section_2.col_fr_line }}</th>
+        <th class="num">{{ labels.section_2.col_fr_amount }}</th>
+        <th class="num">{{ labels.section_2.col_sum_slips }}</th>
+        <th class="num">{{ labels.section_2.col_variance }}</th>
+        <th>{{ labels.section_2.col_status }}</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for row in data.section_2.fr_aggregation %}
+      <tr{% if row.is_variance %} class="variance"{% endif %}>
+        <td>{{ row.line }}</td>
+        <td class="num">{{ money(row.fr_amount) }}</td>
+        <td class="num">{{ money(row.sum_slips) }}</td>
+        <td class="num">{% if row.variance > 0 %}+{{ money(row.variance) }}{% else %}{{ money(row.variance) }}{% endif %}</td>
+        <td class="status">{{ row.status }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% endif %}
+
+  <div class="footer-stamp">sale-audit v{{ data.skill_version }} · {{ labels.footer.amended }} {{ data.skill_updated }} · {{ labels.footer.generated }} {{ data.generated_at }}</div>
+</div>
+
+
+{# ════════════════════════════════ PAGE 3 ════════════════════════════════ #}
+<div class="page">
+
+  <div class="split-50">
+
+    <div>
+      <h2 class="section-band">{{ labels.section_3.title }}</h2>
+      <table class="audit">
+        <thead>
+          <tr>
+            <th>{{ labels.section_3.col_item }}</th>
+            <th class="num">{{ labels.section_3.col_fr }}</th>
+            <th class="num">{{ labels.section_3.col_computed }}</th>
+            <th class="num">{{ labels.section_3.col_var }}</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for row in data.section_3_cash.rows %}
+          <tr{% if row.is_variance %} class="variance{% if row.is_total %} total{% endif %}"{% elif row.is_total %} class="total"{% endif %}>
+            <td>{{ row.item }}</td>
+            <td class="num">{{ money(row.fr) }}</td>
+            <td class="num">{{ money(row.computed) }}</td>
+            <td class="num">{{ varcell(row.var) }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+      {% if data.section_3_cash.footer_note %}
+      <div class="note">{{ data.section_3_cash.footer_note }}</div>
+      {% endif %}
+    </div>
+
+    <div>
+      <h2 class="section-band">{{ labels.section_4.title }}</h2>
+      <table class="audit">
+        <thead>
+          <tr>
+            <th>{{ labels.section_4.col_product }}</th>
+            <th class="num">{{ labels.section_4.col_open }}</th>
+            <th class="num">{{ labels.section_4.col_deliv }}</th>
+            <th class="num">{{ labels.section_4.col_sales }}</th>
+            <th class="num">{{ labels.section_4.col_close }}</th>
+            <th class="num">{{ labels.section_4.col_var }}</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for row in data.section_4_fuel.rows %}
+          <tr>
+            <td>{{ row.product }}</td>
+            <td class="num">{{ row.open_l }}</td>
+            <td class="num">{{ row.deliv_l }}</td>
+            <td class="num">{{ row.sales_l }}</td>
+            <td class="num">{{ row.close_l }}</td>
+            <td class="num">{{ row.var }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+      {% if data.section_4_fuel.footer_note %}
+      <div class="note">{{ data.section_4_fuel.footer_note }}</div>
+      {% endif %}
+
+      <h2 class="section-band">{{ labels.section_4b.title }}</h2>
+      <table class="audit">
+        <thead>
+          <tr>
+            <th>{{ labels.section_4b.col_check }}</th>
+            <th class="num">{{ labels.section_4b.col_pos }}</th>
+            <th class="num">{{ labels.section_4b.col_fr }}</th>
+            <th>{{ labels.section_4b.col_result }}</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for row in data.section_4b_pos_tally %}
+          <tr{% if not row.passed %} class="variance"{% endif %}>
+            <td>{{ row.check }}</td>
+            <td class="num">{{ money(row.pos) }}</td>
+            <td class="num">{{ money(row.fr) }}</td>
+            <td>{{ pos_result(row) }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+
+  </div>
+
+  <h2 class="section-band">{{ labels.section_5.title }}</h2>
+  <p class="note" style="margin:1mm 0 4mm 0;">{{ data.section_5_checklist|safe }}</p>
+
+  <h2 class="section-band">{{ labels.section_6.title }}</h2>
+  <ul class="findings">
+    {% for f in data.section_6_findings %}
+    <li>
+      <span class="finding-title">{{ labels.section_6.finding_prefix }} {{ f.n }} — {{ f.title }}</span>
+      {{ f.body }}
+      <span class="action-label">{{ labels.section_6.action_label }}</span> {{ f.action }}
+    </li>
+    {% endfor %}
+  </ul>
+
+  <div class="footer-stamp">sale-audit v{{ data.skill_version }} · {{ labels.footer.amended }} {{ data.skill_updated }} · {{ labels.footer.generated }} {{ data.generated_at }}</div>
+</div>
+
+</body>
+</html>

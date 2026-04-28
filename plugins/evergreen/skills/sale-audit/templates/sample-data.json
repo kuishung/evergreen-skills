@@ -1,0 +1,146 @@
+{
+  "schema_version": 1,
+  "language": "en",
+  "skill_version": "0.10.2",
+  "skill_updated": "2026-04-28 14:35",
+  "generated_at": "2026-04-28 14:51",
+
+  "station": {
+    "code": "BL",
+    "name_long": "BUBUL LAMA",
+    "name_long_cn": "勿洞拉玛"
+  },
+  "business_date": "2026-04-25",
+
+  "meta": {
+    "prepared_by": "HANISAH",
+    "fund_report_status": "v8 present",
+    "bank_stmts_status": "configured (AmBank 25/04 covered; Maybank 25/04 deferred)"
+  },
+
+  "delivery": {
+    "occurred": true,
+    "summary": "Petrol RON95 16,500 L + Diesel B10 5,500 L (Invoice IPTBINV26007433, Ticket 8012815963, SN P7262245)."
+  },
+
+  "inflow": {
+    "total": 61415.43,
+    "revenue": 60447.93,
+    "cfp_deposit": 967.50
+  },
+
+  "revenue": {
+    "total": 60447.93,
+    "segments": [
+      { "name": "Fuel (incl. BUDI95 receivable)", "amount": 59778.73, "share_pct": 98.9 },
+      { "name": "Buraqmart",                       "amount":   144.70, "share_pct":  0.2 },
+      { "name": "Misc (TT-NonCFP direct)",         "amount":   524.50, "share_pct":  0.9 },
+      { "name": "Rental / iBing",                  "amount":     0.00, "share_pct":  0.0 }
+    ],
+    "footer_note": "Petrol 10,948.96 L × RM 3.87; Diesel 2,861.64 L × RM 2.15. BUDI95 claimable RM 11,236.33 (IPTB receivable, not cash today). Fuel delivery today: Petrol 16,500 L + Diesel 5,500 L = 22,000 L (RM 72,006.00 IPTB invoice).",
+    "channels": [
+      { "name": "Cash",                     "amount": 22829.74, "slips_count": 21, "slips_text": "21", "pct_revenue": 37.8, "notes": "8 Safeguard CDM pickups RM 22,344.00 + 13 TT-NonCFP RM 524.50 (treated as cash-equivalent) — includes BuraqMart RM 144.70 cash and net of BUDI95 cash payment." },
+      { "name": "Merchant",                 "amount":   998.13, "slips_count":  3, "slips_text":  "3", "pct_revenue":  1.7, "notes": "AmBank TID 20317344 settlements (RM 380.00 + 688.30) + VISA TID 20017344 RM 5.00; net of BUDI95 merchant payment RM 485.64." },
+      { "name": "CFP voucher used",         "amount": 13489.96, "slips_count":  9, "slips_text":  "9", "pct_revenue": 22.3, "notes": "9 redemptions on CFP report; matches GreenPOS Voucher MOP RM 13,489.96." },
+      { "name": "BUDI95 (full pump price)", "amount": 23130.10, "slips_count":  0, "slips_text":  "—", "pct_revenue": 38.3, "notes": "Customer-paid RM 11,893.77 (cash 11,408.13 + credit 485.64); IPTB-claimable receivable RM 11,236.33." }
+    ],
+    "channels_total": { "amount": 60447.93, "slips_count": 33, "pct_revenue": 100.0 }
+  },
+
+  "cfp_deposit": {
+    "total": 967.50,
+    "subtitle": "All bank transfer (Maybank); zero cash CFP top-up today despite FR cell.",
+    "subchannels": [
+      { "name": "Cash top-up",          "amount":   0.00, "count": 0 },
+      { "name": "Bank transfer top-up", "amount": 967.50, "count": 1 }
+    ],
+    "subchannels_total": { "amount": 967.50, "count": 1 }
+  },
+
+  "donut_slices": [
+    { "label": "Cash",         "color_var": "--slice-cash",     "pct": 37.8 },
+    { "label": "Merchant",     "color_var": "--slice-merchant", "pct":  1.7 },
+    { "label": "CFP voucher",  "color_var": "--slice-cfp",      "pct": 22.3 },
+    { "label": "BUDI95",       "color_var": "--slice-budi",     "pct": 38.3 }
+  ],
+
+  "section_2": {
+    "subtitle": "25 slips · all individual, no aggregation in FR slip rows",
+    "deferred_note": "§6.11 deferred for Maybank-routed slips: MBB printout for 25-Apr-2026 not yet available; AmBank 25/04 verified. Safeguard pickups credited via G4S CDM (clear at courier-deposit time, partial visibility today).",
+    "slips": [
+      { "doc": "01-5351",     "type": "Safeguard CDM",      "amount": 6270.00, "date_ok": true, "uniq_ok": true, "acct": "✓ AMB(G4S)", "pos_ok": true,  "cleared": { "kind": "deferred", "text": "partial G4S" },                     "in_fr": "ok",      "notes": "HL0352 — G4S courier; AmBank 25/04 07:35 RM 3,765 HL0352 partial credit (consolidated)." },
+      { "doc": "02-5352",     "type": "Safeguard MART",     "amount":   62.00, "date_ok": true, "uniq_ok": true, "acct": "✓ AMB(G4S)", "pos_ok": true,  "cleared": { "kind": "deferred", "text": "partial G4S" },                     "in_fr": "ok",      "notes": "BuraqMart cash deposit; pending G4S consolidated credit." },
+      { "doc": "03-9495M",    "type": "TTNonCFP",           "amount":   25.00, "date_ok": true, "uniq_ok": true, "acct": "✓ AMB 8146", "pos_ok": true,  "cleared": { "kind": "verified", "text": "✓" },                              "in_fr": "ok",      "notes": "Matches AMB 8146 07:07 RM 25 MOHD KHAIRUL NIZAM." },
+      { "doc": "04-3139",     "type": "TTNonCFP",           "amount":   20.00, "date_ok": true, "uniq_ok": true, "acct": "✓ AMB 8146", "pos_ok": true,  "cleared": { "kind": "verified", "text": "✓" },                              "in_fr": "ok",      "notes": "Matches AMB 8146 07:20 RM 20 AZMI BIN AHMAD." },
+      { "doc": "05-6562M",    "type": "TTNonCFP",           "amount":   40.00, "date_ok": true, "uniq_ok": true, "acct": "✓ AMB 8146", "pos_ok": true,  "cleared": { "kind": "missing",  "text": "✗ no match" },                      "in_fr": "ok",      "notes": "No matching credit in 25/04 AMB pool — defer/expect 26/04 printout." },
+      { "doc": "06-7549",     "type": "TTNonCFP",           "amount":   23.00, "date_ok": true, "uniq_ok": true, "acct": "✓ AMB 8146", "pos_ok": true,  "cleared": { "kind": "verified", "text": "✓" },                              "in_fr": "ok",      "notes": "Matches AMB 8146 09:38 RM 23 ABDUL NASIR BIN ABD RISAL." },
+      { "doc": "07-5433M",    "type": "TTNonCFP",           "amount":   20.00, "date_ok": true, "uniq_ok": true, "acct": "✓ AMB 8146", "pos_ok": true,  "cleared": { "kind": "verified", "text": "✓" },                              "in_fr": "ok",      "notes": "Matches AMB 8146 09:56 RM 20 SHAFIKA BINTI WAH SIRU." },
+      { "doc": "08-6912",     "type": "TTNonCFP",           "amount":   78.00, "date_ok": true, "uniq_ok": true, "acct": "✓ AMB 8146", "pos_ok": true,  "cleared": { "kind": "missing",  "text": "✗ no match" },                      "in_fr": "ok",      "notes": "No 25/04 AMB credit RM 78 found — expect 26/04 printout." },
+      { "doc": "09-9261",     "type": "TTNonCFP",           "amount":   30.00, "date_ok": true, "uniq_ok": true, "acct": "✓ AMB 8146", "pos_ok": true,  "cleared": { "kind": "missing",  "text": "✗ no match" },                      "in_fr": "ok",      "notes": "No 25/04 AMB credit RM 30 found." },
+      { "doc": "10-20317344", "type": "Merchant MyDebit",   "amount":  380.00, "date_ok": true, "uniq_ok": true, "acct": "✓ AMB",      "pos_ok": true,  "cleared": { "kind": "deferred", "text": "defer T+1" },                       "in_fr": "ok",      "notes": "Batch 001175 13:49; AMB merchant settles T+1." },
+      { "doc": "11-5353",     "type": "Safeguard CDM",      "amount": 4132.00, "date_ok": true, "uniq_ok": true, "acct": "✓ AMB(G4S)", "pos_ok": true,  "cleared": { "kind": "deferred", "text": "partial G4S" },                     "in_fr": "ok",      "notes": "G4S consolidated." },
+      { "doc": "12-2617M",    "type": "TTCFP (CFP top-up)", "amount":  967.50, "date_ok": true, "uniq_ok": true, "acct": "✓ MBB 5366", "pos_ok": null,  "cleared": { "kind": "deferred", "text": "defer MBB" },                       "in_fr": "ok",      "notes": "<strong>NON-REVENUE</strong> — CFP top-up; PetrolFox deposit; Maybank 25/04 not yet printed." },
+      { "doc": "13-5354",     "type": "Safeguard CDM",      "amount": 6550.00, "date_ok": true, "uniq_ok": true, "acct": "✓ AMB(G4S)", "pos_ok": true,  "cleared": { "kind": "deferred", "text": "partial G4S" },                     "in_fr": "ok",      "notes": "G4S consolidated." },
+      { "doc": "14-5355",     "type": "Safeguard CDM",      "amount":  930.00, "date_ok": true, "uniq_ok": true, "acct": "✓ AMB(G4S)", "pos_ok": true,  "cleared": { "kind": "deferred", "text": "partial G4S" },                     "in_fr": "ok",      "notes": "G4S consolidated." },
+      { "doc": "15-0092M",    "type": "TTNonCFP",           "amount":   73.50, "date_ok": true, "uniq_ok": true, "acct": "✓ AMB 8146", "pos_ok": true,  "cleared": { "kind": "missing",  "text": "✗ no match" },                      "in_fr": "ok",      "notes": "No 25/04 AMB credit RM 73.50 found." },
+      { "doc": "16-2808",     "type": "TTNonCFP",           "amount":   50.00, "date_ok": true, "uniq_ok": true, "acct": "✓ AMB 8146", "pos_ok": true,  "cleared": { "kind": "missing",  "text": "✗ no match" },                      "in_fr": "ok",      "notes": "No matching credit." },
+      { "doc": "17-1875",     "type": "TTNonCFP",           "amount":   15.00, "date_ok": true, "uniq_ok": true, "acct": "✓ AMB 8146", "pos_ok": true,  "cleared": { "kind": "missing",  "text": "✗ no match" },                      "in_fr": "ok",      "notes": "No matching credit." },
+      { "doc": "18-7043M",    "type": "TTNonCFP",           "amount":   50.00, "date_ok": true, "uniq_ok": true, "acct": "✓ AMB 8146", "pos_ok": true,  "cleared": { "kind": "missing",  "text": "✗ no match" },                      "in_fr": "ok",      "notes": "No matching credit." },
+      { "doc": "19-5329",     "type": "TTNonCFP",           "amount":   50.00, "date_ok": true, "uniq_ok": true, "acct": "✓ AMB 8146", "pos_ok": true,  "cleared": { "kind": "missing",  "text": "✗ no match" },                      "in_fr": "ok",      "notes": "No matching credit." },
+      { "doc": "20-5356",     "type": "Safeguard CDM",      "amount": 2112.00, "date_ok": true, "uniq_ok": true, "acct": "✓ AMB(G4S)", "pos_ok": true,  "cleared": { "kind": "deferred", "text": "partial G4S" },                     "in_fr": "ok",      "notes": "G4S consolidated." },
+      { "doc": "21-5357",     "type": "Safeguard MART",     "amount":   82.00, "date_ok": true, "uniq_ok": true, "acct": "✓ AMB(G4S)", "pos_ok": true,  "cleared": { "kind": "deferred", "text": "partial G4S" },                     "in_fr": "ok",      "notes": "BuraqMart cash deposit." },
+      { "doc": "22-9556",     "type": "TTNonCFP",           "amount":   50.00, "date_ok": true, "uniq_ok": true, "acct": "✓ AMB 8146", "pos_ok": true,  "cleared": { "kind": "missing",  "text": "✗ no match" },                      "in_fr": "ok",      "notes": "No matching credit." },
+      { "doc": "23-20317344", "type": "Merchant MyDebit",   "amount":  688.30, "date_ok": true, "uniq_ok": true, "acct": "✓ AMB",      "pos_ok": true,  "cleared": { "kind": "deferred", "text": "defer T+1" },                       "in_fr": "ok",      "notes": "Batch 001176 21:53." },
+      { "doc": "24-20017344", "type": "Merchant Credit",    "amount":    5.00, "date_ok": true, "uniq_ok": true, "acct": "✓ AMB",      "pos_ok": true,  "cleared": { "kind": "deferred", "text": "defer T+1" },                       "in_fr": "ok",      "notes": "VISA — TID 20017344." },
+      { "doc": "25-5358",     "type": "Safeguard CDM",      "amount": 2206.00, "date_ok": true, "uniq_ok": true, "acct": "✓ AMB(G4S)", "pos_ok": true,  "cleared": { "kind": "deferred", "text": "partial G4S" },                     "in_fr": "ok",      "notes": "G4S consolidated." }
+    ],
+    "fr_aggregation": [
+      { "line": "Safeguards (FR aggregate)",       "fr_amount": 22344.00, "sum_slips": 22344.00, "variance":   0.00, "status": "Clean",    "is_variance": false },
+      { "line": "Instant Transfer (CFP)",          "fr_amount":   967.50, "sum_slips":   967.50, "variance":   0.00, "status": "Clean",    "is_variance": false },
+      { "line": "Instant Transfer (Non CFP)",      "fr_amount":   524.50, "sum_slips":   524.50, "variance":   0.00, "status": "Clean",    "is_variance": false },
+      { "line": "Merchant Settlement",             "fr_amount":  1073.30, "sum_slips":  1073.30, "variance":   0.00, "status": "Clean",    "is_variance": false },
+      { "line": "Cash in Today (excl Opening)",    "fr_amount": 11237.94, "sum_slips": 11586.61, "variance": 348.67, "status": "Variance", "is_variance": true  }
+    ]
+  },
+
+  "section_3_cash": {
+    "rows": [
+      { "item": "Opening cash",              "fr":   217.24, "computed":   217.24, "var":      null, "is_variance": false, "is_total": false },
+      { "item": "Cash revenue (POS)",        "fr": 33961.74, "computed": 33713.37, "var":   -248.37, "is_variance": true,  "is_total": false },
+      { "item": "CFP cash top-up",           "fr": 22868.50, "computed":     0.00, "var": -22868.50, "is_variance": true,  "is_total": false },
+      { "item": "BuraqMart cash",            "fr":   144.70, "computed":   144.70, "var":      null, "is_variance": false, "is_total": false },
+      { "item": "Safeguards (CDM) pick-up",  "fr": 22344.00, "computed": 22344.00, "var":      null, "is_variance": false, "is_total": false },
+      { "item": "Closing cash",              "fr": 11455.18, "computed": 11586.61, "var":   -131.43, "is_variance": true,  "is_total": true  }
+    ],
+    "footer_note": "FR \"CFP Cash Top-up RM 22,868.50\" appears mis-routed; only RM 967.50 TTCFP slip exists for the day and is bank-transfer (not cash). Closing cash variance RM 131.43 short."
+  },
+
+  "section_4_fuel": {
+    "rows": [
+      { "product": "RON95 (Petrol)", "open_l": "17,176", "deliv_l": "DELIV 16,500", "sales_l": "10,948.96", "close_l": "22,525",  "var": "+(178)*"    },
+      { "product": "Diesel B10",     "open_l": "14,756", "deliv_l": "DELIV 5,500",  "sales_l": "2,861.64",  "close_l": "24,673*", "var": "+(varies)*" }
+    ],
+    "footer_note": "Delivery 25/04 08:42 (SN P7262245, ticket 8012815963, IPTBINV26007433 RM 72,006.00). Dipping per delivery sheet 19.18.42: Petrol 1501→1892 mm; Diesel 1596→1978 mm. Stock-in differences 5,572 L (P) and 5,533 L (D) per dipping vs delivered 16,500 / 5,500 L — variance flagged: Petrol dipping covers only one tank reading; multi-tank petrol receiving via Tanks 1-4 not fully in dipping table."
+  },
+
+  "section_4b_pos_tally": [
+    { "check": "GreenPOS fuel total",     "pos": 48542.40, "fr": 48525.00, "result": "✗ −17.40",   "passed": false },
+    { "check": "CFP voucher vs GreenPOS", "pos": 13489.96, "fr": 13489.96, "result": "✓ Verified", "passed": true  },
+    { "check": "Merchant fuel",           "pos":  1483.77, "fr":  1073.30, "result": "✗ −410.47",  "passed": false },
+    { "check": "Autocount Mart",          "pos":   144.70, "fr":   144.70, "result": "✓ Verified", "passed": true  },
+    { "check": "BUDI95 sales (POS)",      "pos": 23130.10, "fr": 23130.10, "result": "✓ Verified", "passed": true  }
+  ],
+
+  "section_5_checklist": "<strong>Present:</strong> GreenPOS Daily Complete Report, Shift A (SHARUL) + Shift B (HANISAH) till reports, Fund Report v8, CFP report (full day) + CFP Shift A, Merchant settlements (3 slips), 25 proof-of-fund slips, BuraqMart Autocount POS daily + Shift A + Shift B + Stock Take Shift A, Fuel delivery order (IPTBINV26007433 + dipping + delivery report), PUKAL BUDI95 receipts (Shift A + Shift B). <strong>Partial:</strong> Stock Take MART Shift B (not in folder, only Shift A present). <strong>Missing:</strong> Lot rental records (no rental activity recorded today). <strong>N/A:</strong> iBing (BL has no iBing).",
+
+  "section_6_findings": [
+    { "n": 1, "title": "FR \"CFP Cash Top-up\" RM 22,868.50 mis-stated.", "body": "Cash CFP top-up cell on FR shows RM 22,868.50 yet only one CFP top-up exists today (TTCFP slip 12 RM 967.50 via Maybank) — a bank transfer, not cash. The figure 22,868.50 is close to BUDI95 cash sales (RM 22,185.67) and appears to be a wrong-cell entry. Distorts cash-balance view by RM 22,868.50.", "action": "Have HANISAH correct the FR — set Cash CFP Top-up to 0; show the RM 967.50 only under Instant Transfer (CFP). Re-issue FR." },
+    { "n": 2, "title": "Eight TT-NonCFP slips RM 401.50 unmatched in 25/04 AmBank pool.", "body": "Slips 05, 08, 09, 15, 16, 17, 18, 19, 22 (RM 40, 78, 30, 73.50, 50, 15, 50, 50, 50 = RM 436.50) have no corresponding credit in the AmBank 8881058618146 25/04 printout. Only 4 of 13 TTNonCFP slips reconcile (RM 88 confirmed).", "action": "Re-fetch AmBank 8146 printout covering full day 25/04 (current pool may be only morning portion). Verify against next-day 26/04 printout; flag any still missing as unverified revenue." },
+    { "n": 3, "title": "Merchant fuel POS vs FR variance RM 410.47.", "body": "POS Credit Card MOP RM 1,483.77 includes BUDI95 credit-card payment RM 485.64; FR Merchant Settlement aggregates RM 1,073.30 (380 + 688.30 + 5). The two reconcile after BUDI95 split (1,483.77 − 485.64 = 998.13 vs 1,073.30 = +75.17 still unexplained).", "action": "Reconcile BUDI95 merchant component against AmBank EDC settlement; investigate 75.17 residual." },
+    { "n": 4, "title": "Cash closing variance RM 131.43 short.", "body": "Computed closing 11,586.61 vs FR 11,455.18. Cash revenue per POS 33,568.67 + mart 144.70 vs FR-stated 33,961.74 + 144.70 also differs (POS short 248.37).", "action": "Recount cash drawer; reconcile Shift A (BAL −10,759.33 incl. floats) and Shift B (BAL −2,550.91) closing balances; explain shift-handover float movements." },
+    { "n": 5, "title": "Fuel delivery dipping incomplete.", "body": "25/04 delivery 22,000 L (Petrol 16,500 + Diesel 5,500) per IPTBINV26007433. Dipping report shows only one petrol tank's stock-in change (5,572 L), but the delivery is split across Tanks 1, 2, 3, 4 per handwritten note. Receiving evidence does not document each-tank intake.", "action": "Have site-staff record per-tank before/after dipping for every multi-tank delivery; cross-foot to delivery ticket QTY." },
+    { "n": 6, "title": "GreenPOS vs FR fuel grand-total variance RM 17.40.", "body": "POS RM 48,542.40 vs FR RM 48,525.00. FR shows \"Crash 0\" reconciliation.", "action": "Verify if FR adjustment \"−20.00 / Check 0.001\" relates; bring GreenPOS report and FR cell into agreement." },
+    { "n": 7, "title": "§6.11 clearance verification — DEFERRED.", "body": "AmBank 8881058618135/146 25/04 printout covers only ~06:00–09:56 narrow window (8 credits). Maybank 510161015366/etc 25/04 printout not yet available. Of 25 slips: 4 verified, 9 unmatched (likely outside printout window), 8 G4S Safeguard partial-credit, 4 deferred (Merchant T+1 settlement and TTCFP via MBB).", "action": "Re-run §6.11 once 26/04 printouts arrive for AMB 8146/8135 full-day and MBB 5101/5601/5601 covering 25/04 value date." },
+    { "n": 8, "title": "§6.12 aggregation integrity — variances flagged.", "body": "Cash-in-today FR 11,237.94 vs computed 11,586.61 (+348.67) and Cash CFP Top-up 22,868.50 (vs slip 967.50 / bank-transfer) are aggregation/labeling exceptions. Safeguard, Instant Transfer (CFP), Instant Transfer (Non-CFP), and Merchant aggregate sums all reconcile to slips RM 22,344.00 / 967.50 / 524.50 / 1,073.30 — clean on those four lines.", "action": "Correct FR cash cells; re-issue FR; the four reconciling lines stay clean." }
+  ]
+}

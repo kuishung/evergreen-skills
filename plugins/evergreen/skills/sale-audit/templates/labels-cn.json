@@ -1,0 +1,106 @@
+{
+  "title_suffix": "— 每日销售审计 ·",
+  "total": "合计",
+  "delivery_today": "今日有油料配送",
+
+  "meta": {
+    "station": "站",
+    "business_date": "业务日期",
+    "prepared_by": "制作人",
+    "fund_report": "资金报告",
+    "bank_stmts": "银行账本"
+  },
+
+  "section_1": {
+    "title": "第 1 节 — 流入分类",
+    "total_inflow": "总流入",
+    "equals_revenue": "= 营收",
+    "plus_cfp_deposit": "+ CFP 存款（非营收）",
+    "caption": "总流入 = 营收 + CFP 存款（非营收）。",
+    "revenue_card_header": "营收",
+    "cfp_card_header": "CFP 存款 — 非营收",
+    "channels_table_header": "营收 — 按收据/POS 渠道汇总",
+    "by_channel": "按渠道",
+    "col_segment": "业务段",
+    "col_rm": "RM",
+    "col_share": "占比",
+    "col_subchannel": "子渠道",
+    "col_amt": "金额",
+    "col_count": "笔数",
+    "col_channel": "渠道",
+    "col_total_rm": "合计 (RM)",
+    "col_slips": "收据数",
+    "col_pct_rev": "% 营收",
+    "col_notes": "备注"
+  },
+
+  "section_2": {
+    "title": "第 2 节 — 资金证据",
+    "fr_agg_title": "FR 聚合核对",
+    "col_doc": "单号",
+    "col_type": "类型",
+    "col_amt": "金额 (RM)",
+    "col_date": "日期✓",
+    "col_uniq": "唯一✓",
+    "col_acct": "账户✓",
+    "col_pos": "POS✓",
+    "col_cleared": "已清算✓",
+    "col_in_fr": "在FR表",
+    "col_notes": "备注",
+    "col_fr_line": "FR 项目",
+    "col_fr_amount": "FR 金额",
+    "col_sum_slips": "收据合计",
+    "col_variance": "差异",
+    "col_status": "状态"
+  },
+
+  "legend": {
+    "date": "收据日期与审核业务日期相符（§6 r.4）。",
+    "uniq": "此收据非他张证据的重复（§6 r.5）。",
+    "acct": "款项进入§2列出的六个核准 Maybank/AmBank 账户之一（§6 r.6）。",
+    "pos": "收据金额与渠道与 POS 系统总额相符（§6 r.7–8）。",
+    "cleared": "银行账本（Google 表格）已确认款项于审核日入账，支票允许 T+1 至 T+3（§6 r.11）。延后核对时此栏留空。",
+    "in_fr": "✓ 单独列出 / ∑ 属合并条目 / ✗ 完全缺漏（§6 r.12）。"
+  },
+
+  "section_3": {
+    "title": "第 3 节 — 现金重点",
+    "col_item": "项目",
+    "col_fr": "FR",
+    "col_computed": "计算值",
+    "col_var": "差异"
+  },
+
+  "section_4": {
+    "title": "第 4 节 — 燃料数量",
+    "col_product": "产品",
+    "col_open": "开 (L)",
+    "col_deliv": "进 (L)",
+    "col_sales": "售 (L)",
+    "col_close": "关 (L)",
+    "col_var": "差异"
+  },
+
+  "section_4b": {
+    "title": "第 4b 节 — POS 核对",
+    "col_check": "核对",
+    "col_pos": "POS",
+    "col_fr": "FR",
+    "col_result": "结果"
+  },
+
+  "section_5": {
+    "title": "第 5 节 — §4 文件清单"
+  },
+
+  "section_6": {
+    "title": "第 6 节 — 发现与建议",
+    "finding_prefix": "发现",
+    "action_label": "措施："
+  },
+
+  "footer": {
+    "amended": "修订",
+    "generated": "生成"
+  }
+}
