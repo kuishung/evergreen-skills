@@ -7,7 +7,8 @@ This folder holds the deterministic-rendering layer for `sale-audit` PDFs. Goal:
 | File | Purpose | Stage |
 |---|---|---|
 | `audit.css` | Brand palette, typography, layout grid, table styling, donut chart, share bars, footer stamp. | shipped |
-| `preview-bl-en.html` | Static reproduction of the BL audit dated 2026-04-25 (gold-standard reference). Open in a browser to confirm the look. | shipped |
+| `preview-bl-en.html` | Static reproduction of the BL audit dated 2026-04-25 (gold-standard reference); references `audit.css` as a sibling file. | shipped |
+| `preview-bl-en-standalone.html` | Same content as `preview-bl-en.html` but with the entire `audit.css` inlined in a `<style>` block — a single self-contained file. Easiest path to preview when only one file can be downloaded. | shipped |
 | `audit.html.j2` | Jinja2 template — parameterised version of the preview HTML. | next commit |
 | `labels-en.json`, `labels-cn.json` | All visible strings, externalised so EN and CN PDFs share one template. | next commit |
 | `sample-data.json` | Realistic audit data the renderer fills the template with. | next commit |
