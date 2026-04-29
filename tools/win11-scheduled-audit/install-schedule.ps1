@@ -135,6 +135,14 @@ if (-not (Get-Command claude -ErrorAction SilentlyContinue)) {
 # locks its permission scope there.
 Set-Location -Path $Cfg.AuditOutputRoot
 
+# Force Claude Code to refresh the evergreen plugin from GitHub on
+# every launch. Without this the scheduled run uses whatever version
+# was last pulled into ~\.claude\plugins\cache\, even after the
+# maintainer pushes new commits. Setting FORCE_AUTOUPDATE_PLUGINS=1
+# makes every 06:30 trigger pull-latest before invoking the skill,
+# so the server never falls behind GitHub without explicit upkeep.
+$env:FORCE_AUTOUPDATE_PLUGINS = '1'
+
 $stationsCsv = $Cfg.Stations -join ', '
 # IMPORTANT prompt ordering: action first, context second. claude in
 # -p mode is single-turn, and if the first paragraph reads like a
