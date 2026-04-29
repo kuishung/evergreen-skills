@@ -130,6 +130,11 @@ if (-not (Get-Command claude -ErrorAction SilentlyContinue)) {
     exit 2
 }
 
+# Anchor the working directory to a folder we control, otherwise
+# Task Scheduler launches us from C:\WINDOWS\system32 and Claude
+# locks its permission scope there.
+Set-Location -Path $Cfg.AuditOutputRoot
+
 $stationsCsv = $Cfg.Stations -join ', '
 $prompt = @"
 Reference setup -- save each as a `reference` memory if not already saved, and use these values in this run regardless of any older memory:
@@ -146,8 +151,23 @@ $banner = "=== Evergreen Sale Audit === $((Get-Date).ToString('yyyy-MM-dd HH:mm:
 Add-Content -Path $logFile -Value $banner
 Write-Host $banner
 
+# --dangerously-skip-permissions is the documented opt-in for
+# unattended runs: there's no human at 06:30 to answer prompts, and
+# the wrapper is the only thing that ever calls claude in this
+# context, so the trust boundary is the wrapper itself.
+$claudeArgs = @(
+    '--dangerously-skip-permissions',
+    '--add-dir', $Cfg.DailyReportRoot,
+    '-p', $prompt
+)
+if ($Cfg.LocalCsvPath -and $Cfg.LocalCsvPath.Trim().Length -gt 0) {
+    # Insert --add-dir for the CSV folder so its parent is reachable
+    $csvDir = Split-Path -Parent $Cfg.LocalCsvPath
+    if ($csvDir) { $claudeArgs = @('--add-dir', $csvDir) + $claudeArgs }
+}
+
 try {
-    & claude -p $prompt 2>&1 | Tee-Object -FilePath $logFile -Append
+    & claude $claudeArgs 2>&1 | Tee-Object -FilePath $logFile -Append
     $exitCode = $LASTEXITCODE
 } catch {
     $exitCode = 99
