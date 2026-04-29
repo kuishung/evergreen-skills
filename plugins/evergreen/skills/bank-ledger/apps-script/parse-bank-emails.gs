@@ -38,6 +38,15 @@ const SHEET_ID     = 'PUT-SHEET-ID-HERE';
 const SHEET_NAME   = 'Transactions';
 const UNZIP_URL    = 'https://ambank-unzip.onrender.com/unzip';
 
+// Drive folder ID where the local-sync exports (bank-ledger.csv +
+// bank-ledger.xlsx) are written after each successful daily ingestion.
+// Get this from the URL of the folder in Google Drive — the last
+// path segment after `/folders/`. Leave as the placeholder string to
+// disable local-sync exports entirely (the daily ingestion will still
+// run; sale-audit will simply have no CSV to fall back to in
+// scheduled / sandboxed environments).
+const SYNC_FOLDER_ID = 'PUT-DRIVE-FOLDER-ID-HERE';
+
 // AmBank's transaction email subject embeds the account's last 2-3
 // digits in parentheses (e.g., "*35)" or "35)"). Map suffix → full
 // 13-digit account number. Suffixes here mirror sale-audit §2.
@@ -125,6 +134,17 @@ function fetchAmBankToSheet() {
   });
 
   Logger.log('Done. Total new rows added: ' + newCount);
+
+  // After the daily ingestion completes, refresh the local-sync exports
+  // so any environment that can't reach script.google.com (e.g., Cowork's
+  // scheduled-task sandbox) can still verify clearance from the on-disk
+  // CSV. Wrapped in try/catch so an export failure can't undo a
+  // successful ingestion.
+  try {
+    exportLedgerForLocalSync();
+  } catch (e) {
+    Logger.log('Local-sync export failed (ingestion still succeeded): ' + e.message);
+  }
 }
 
 function getAccountNo_(subject) {
@@ -407,4 +427,75 @@ function formatTimeCell_(raw) {
 function jsonResponse_(obj) {
   return ContentService.createTextOutput(JSON.stringify(obj))
     .setMimeType(ContentService.MimeType.JSON);
+}
+
+// ══════════════ Local-sync exports (CSV + XLSX to a Drive folder) ═══
+
+/**
+ * Write two sibling files into the configured Drive folder so the
+ * `Transactions` tab is available on disk via Google Drive Desktop sync:
+ *
+ *   bank-ledger.csv   — standard-library-readable on any platform.
+ *                       Used by sale-audit's §6.11 fallback when the
+ *                       Web App is unreachable from a sandboxed
+ *                       runner (e.g., Cowork scheduled tasks).
+ *   bank-ledger.xlsx  — same data in spreadsheet form, for the user
+ *                       to open in Excel / Google Sheets directly.
+ *
+ * Both files always overwrite the same filenames, so the synced path
+ * stays stable for downstream consumers. Called after each successful
+ * `fetchAmBankToSheet()` so the on-disk copy refreshes once per
+ * ingestion (no separate trigger needed). Skipped silently when
+ * SYNC_FOLDER_ID is left at its placeholder value.
+ */
+function exportLedgerForLocalSync() {
+  if (!SYNC_FOLDER_ID || SYNC_FOLDER_ID === 'PUT-DRIVE-FOLDER-ID-HERE') {
+    Logger.log('SYNC_FOLDER_ID not configured — skipping local-sync export.');
+    return;
+  }
+  const folder = DriveApp.getFolderById(SYNC_FOLDER_ID);
+  exportSheetAs_(folder, 'csv',  'bank-ledger.csv');
+  exportSheetAs_(folder, 'xlsx', 'bank-ledger.xlsx');
+  Logger.log('Local-sync export complete: bank-ledger.csv + bank-ledger.xlsx');
+}
+
+/**
+ * Fetch the Sheet via Google Sheets' export endpoint in the requested
+ * format and write the bytes into `folder` under `targetName`,
+ * overwriting any previous file with the same name.
+ *
+ * Uses an authenticated UrlFetchApp call rather than DriveApp.getBlob()
+ * because Sheets are cloud-only objects — `getBlob()` returns a tiny
+ * shortcut, not the actual cell data.
+ */
+function exportSheetAs_(folder, format, targetName) {
+  const url = 'https://docs.google.com/spreadsheets/d/' + SHEET_ID + '/export?format=' + encodeURIComponent(format);
+  const res = UrlFetchApp.fetch(url, {
+    headers: { Authorization: 'Bearer ' + ScriptApp.getOAuthToken() },
+    muteHttpExceptions: true,
+  });
+  const code = res.getResponseCode();
+  if (code !== 200) {
+    throw new Error('Sheet ' + format + ' export failed: HTTP ' + code + ' — ' + String(res.getContentText()).slice(0, 200));
+  }
+
+  // Trash any previous file with the same name so we never accumulate
+  // "bank-ledger (1).csv" duplicates.
+  const existing = folder.getFilesByName(targetName);
+  while (existing.hasNext()) {
+    existing.next().setTrashed(true);
+  }
+
+  const blob = res.getBlob().setName(targetName);
+  folder.createFile(blob);
+}
+
+/**
+ * Manual standalone export — call this from the Apps Script editor's
+ * function dropdown if you ever need to push a fresh local copy
+ * outside of the daily ingestion (e.g., after manually editing a
+ * Sheet row, or to verify the SYNC_FOLDER_ID is correct).
+ */
+function exportLedgerNow() {
+  exportLedgerForLocalSync();
 }

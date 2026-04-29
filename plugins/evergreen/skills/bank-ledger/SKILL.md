@@ -1,8 +1,8 @@
 ---
 name: bank-ledger
 description: Use this skill whenever the user (Evergreen back-office) wants to maintain or query the master bank-ledger Google Sheet — the canonical record of every credit and debit hitting the six approved Maybank/AmBank accounts. Triggers include "refresh bank ledger", "import bank transactions", "check ledger", "show unmatched credits", "set up bank ledger", "tune bank-ledger parser", or any task involving incoming bank statement attachments or daily reconciliation against the master sheet.
-version: 0.3.1
-updated: 2026-04-26 23:08
+version: 0.4.0
+updated: 2026-04-29 08:10
 ---
 
 # Bank Ledger — Evergreen Master Transaction Sheet
@@ -66,6 +66,7 @@ On first run, ask and save these `reference` memories. Verify each on every reus
 1. **Bank-ledger Sheet ID** — the long string in the Sheet's URL.
 2. **Bank-ledger Web App URL** — the deployed `doGet` endpoint, format `https://script.google.com/macros/s/AKfycb…/exec`.
 3. **Bank-ledger Web App token** — the value of the Apps Script's `WEB_APP_TOKEN` script property (a long random string). Treat as a password; never log or echo it.
+4. **Local CSV path** — absolute filesystem path to the synced `bank-ledger.csv` produced by §6.1 (e.g., `C:\Users\<…>\My Drive\Evergreen\BankLedger\bank-ledger.csv`). Optional but strongly recommended: this is what `sale-audit` falls back to when the Web App can't be reached (Cowork scheduled-task sandbox blocks `script.google.com`).
 
 ## 5. Workflow — interactive
 
@@ -85,8 +86,24 @@ Runs entirely inside Google — no Claude session, no server cron. The Apps Scri
 4. Parse the returned CSV. Skip the header row on subsequent runs.
 5. Prepend the account number, append the email's received date, and write each row to the `Transactions` tab.
 6. Mark the Gmail message-id as processed via the `doneIds` script property so it is never re-ingested.
+7. **Refresh the local-sync exports** by calling `exportLedgerForLocalSync()` (§6.1). Wrapped in a try/catch so an export failure doesn't undo a successful ingestion.
 
 Failures are logged to the Apps Script execution log (Apps Script editor → **Executions**); they do not block subsequent emails.
+
+### 6.1 Local-sync exports (CSV + XLSX)
+
+After every successful daily ingestion, the script writes two sibling files into the Drive folder identified by `SYNC_FOLDER_ID`:
+
+| File | Format | Consumer |
+|---|---|---|
+| `bank-ledger.csv` | UTF-8 text, plain CSV | `sale-audit` reads this directly off the synced filesystem when the Web App is unreachable (Cowork scheduled tasks). Python stdlib `csv` only — no `pip install` required. |
+| `bank-ledger.xlsx` | Excel workbook | Human-friendly review copy — open in Excel / LibreOffice / Google Sheets. Same data as the CSV, same structure as the live Sheet. |
+
+Both files always overwrite the same filename so the consumer paths stay stable. Google Drive Desktop syncs the folder to the local machine; the sale-audit fallback path is the OS-local mirror of `<Drive>/<SYNC_FOLDER>/bank-ledger.csv`.
+
+**Setup is one-time:** create a Drive folder (e.g., `Evergreen / BankLedger`), copy its folder ID from the URL, paste it into the Apps Script's `SYNC_FOLDER_ID` constant, save. From the next daily ingestion onwards, both files appear in that folder. If `SYNC_FOLDER_ID` is left at its placeholder, the export step is silently skipped — useful while ramping up the rest of the skill.
+
+**Manual export:** call `exportLedgerNow()` from the Apps Script editor's function dropdown to force a fresh export outside of the daily ingestion.
 
 ## 7. doGet — Web App query API
 
@@ -163,7 +180,19 @@ The Apps Script writes the header row automatically on first run, so you don't n
 3. Fill in the constants at the top of the file:
    - `ZIP_PASSWORD` — the AmBank-issued password for the daily ZIP.
    - `SHEET_ID` — from §8.1.
+   - `SYNC_FOLDER_ID` — from §8.2.1 below (recommended; leave as placeholder to skip the local-sync exports).
 4. Save (`Ctrl+S`). Project name: **Bank Ledger Importer**.
+
+### 8.2.1 Create the local-sync Drive folder
+
+This folder is what gets mirrored to your local disk by Google Drive Desktop. Sale-audit reads `bank-ledger.csv` from inside it when the Web App is unreachable.
+
+1. In the same Gmail account, open <https://drive.google.com/drive/my-drive>.
+2. Create a folder — recommended name `Evergreen / BankLedger` (or nested, `Evergreen` then `BankLedger` inside).
+3. Open the folder. The URL shows `https://drive.google.com/drive/folders/<FOLDER_ID>` — copy the `<FOLDER_ID>` portion.
+4. Paste it into `SYNC_FOLDER_ID` in the Apps Script (§8.2 step 3) and save.
+5. On the Win 11 server (or wherever sale-audit runs), make sure **Google Drive for Desktop** is installed and signed in to the same Gmail. The folder will sync down to a local path like `C:\Users\<you>\My Drive\Evergreen\BankLedger\`. Note the absolute path — sale-audit needs it later as `reference` memory item 4 (§4 of this skill).
+6. Run **`exportLedgerNow`** once from the Apps Script editor's function dropdown. Check the Drive folder — `bank-ledger.csv` and `bank-ledger.xlsx` should appear within a minute. Open the CSV to confirm the data looks right.
 
 ### 8.3 Set the Web App token
 

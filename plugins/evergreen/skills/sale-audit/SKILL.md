@@ -1,8 +1,8 @@
 ---
 name: sale-audit
 description: Use this skill whenever the user (Evergreen back-office / management) wants to audit, verify, or check the daily sale submission of a petrol station — TK (Tg. Kapor), BS (Berkat Setia), or BL (Bubul Lama). Triggers include phrases like "audit TK", "audit sale", "check BS sale", "verify fund report", "run daily audit", "daily sale audit for <date>", or any request to reconcile a station's Fund Report against its supporting documents and produce an audit PDF.
-version: 0.11.1
-updated: 2026-04-29 07:45
+version: 0.12.0
+updated: 2026-04-29 08:10
 ---
 
 # Sale Audit — Evergreen Petrol Stations
@@ -31,9 +31,10 @@ Any deposit/transfer to an account outside this list is an automatic finding.
 On first run, ask the user for the inputs below and save each to memory as a `reference` memory so they are never asked again:
 
 1. **Daily-report root path** — per-station, per-date folders containing the files in §4.
-2. **Bank-ledger Web App URL** — the deployed `bank-ledger` Apps Script Web App. Format: `https://script.google.com/macros/s/AKfycb.../exec`. Set up via the `bank-ledger` skill's §7. Used by §6 rule 11 to verify clearance from any environment (your laptop, the Win 11 server, scheduled Cowork) without Google credentials. Replaces the old "bank-statement folder" path.
+2. **Bank-ledger Web App URL** — the deployed `bank-ledger` Apps Script Web App. Format: `https://script.google.com/macros/s/AKfycb.../exec`. Set up via the `bank-ledger` skill's §7. Used by §6 rule 11 as the **primary** clearance path (interactive runs on machines with HTTPS access to `script.google.com`). Replaces the old "bank-statement folder" path.
 3. **Bank-ledger Web App token** — the shared-secret string stored as the Apps Script's `WEB_APP_TOKEN` script property. Required on every request to the Web App. Treat as a password.
-4. **Audit-output root** — a **single** folder shared by all stations. The skill creates the date tree inside it as `<audit-output-root>/<YYYY>/<YYYY-MM>/<YYYY-MM-DD>/` and writes every station's PDF into the same leaf folder, so the user never has to switch directories between stations. If an existing memory points to a per-station path, treat only its parent as the new root, confirm with the user once, and update the memory.
+4. **Bank-ledger local CSV path** — absolute filesystem path to `bank-ledger.csv` (e.g., `C:\Users\<you>\My Drive\Evergreen\BankLedger\bank-ledger.csv`). Written by the bank-ledger Apps Script's `exportLedgerForLocalSync()` (see bank-ledger SKILL.md §6.1) and synced to the local disk by Google Drive for Desktop. **This is the §6 rule 11 fallback** — used whenever the Web App is unreachable (e.g., Cowork's scheduled-task sandbox blocks `script.google.com`). Required for unattended runs; optional for purely interactive use.
+5. **Audit-output root** — a **single** folder shared by all stations. The skill creates the date tree inside it as `<audit-output-root>/<YYYY>/<YYYY-MM>/<YYYY-MM-DD>/` and writes every station's PDF into the same leaf folder, so the user never has to switch directories between stations. If an existing memory points to a per-station path, treat only its parent as the new root, confirm with the user once, and update the memory.
 
 Before reusing any remembered value, verify it still resolves: paths via filesystem check, Web App by issuing a token-only ping (`?token=<TOKEN>`) and confirming `{"ok":true,"ping":"bank-ledger",...}`. If anything fails, ask once and update the memory. If the user has not answered for a given input yet, ask for it at the start of the first audit that needs it — do not proceed without it.
 
@@ -91,9 +92,15 @@ Run every check. Flag every failure.
 8. **Channel tally.** Per-channel revenue in proof-of-fund must match the per-channel split in the POS systems.
 9. **CFP vs. GreenPOS voucher.** Sum of the CFP report's **voucher-usage lines only** (redemptions against pre-paid balance) must tally with the GreenPOS voucher line. CFP top-ups are deposits (§5.2) and are **excluded** from this tally — if a day's "CFP total" matches only when top-ups are included, someone has mis-classified a deposit as revenue.
 10. **Fuel quantity.** Opening fuel + deliveries − sales = closing fuel. Reconcile against the fuel quantity records and delivery orders, per product.
-11. **Funds cleared.** Clearance is verified by querying the **bank-ledger Web App** (§3 items 2–3) which is fronted by the same Apps Script that ingests MBB / AmBank email alerts into the master Google Sheet every 30 minutes. The Web App returns structured JSON, so there is no OCR, no overlap, no folder coverage problem.
+11. **Funds cleared.** Clearance is verified by querying the **bank-ledger Web App** (§3 items 2–3) — fronted by the same Apps Script that ingests AmBank email-attached daily statement CSVs into the master Google Sheet. The Web App returns structured JSON, so there is no OCR, no overlap, no folder coverage problem. When the Web App is unreachable (e.g., a sandboxed scheduled-task environment that blocks `script.google.com`), the skill **falls back automatically** to a local CSV mirror of the same Sheet (§3 item 4), written by the bank-ledger Apps Script after every successful daily ingestion and synced to disk via Google Drive for Desktop. The fallback uses the same matching logic and produces the same `Cleared✓` results — only the data-fetch path differs.
 
-    1. **Connectivity ping.** Before any per-slip lookup, GET `<URL>?token=<TOKEN>` (no other params). Expected response: `{"ok":true,"ping":"bank-ledger","row_count":<int>}`. If the response is missing, non-200, or `ok: false`, the ledger is **unreachable** for this run — do not abort; instead leave every slip's `Cleared✓` blank and raise §6.11-status finding `clearance verification deferred — bank-ledger Web App unreachable: <reason>`. A ping failure must never block the rest of the audit (§6 rules 1–10 still run).
+    1. **Connectivity ping.** Before any per-slip lookup, GET `<URL>?token=<TOKEN>` (no other params). Expected response: `{"ok":true,"ping":"bank-ledger","row_count":<int>}`. If the response is missing, non-200, or `ok: false`, the Web App is **unreachable** for this run — proceed to the **CSV fallback** in step 1b, do **not** defer immediately and do **not** abort the audit (§6 rules 1–10 still run regardless).
+    1b. **CSV fallback.** If the Web App ping fails, look for the local CSV at the path saved as §3 item 4. If the file exists and its modified time is within the last 36 hours (acceptable since the upstream Apps Script export runs once per daily ingestion at ~06:00):
+       - Read the file with Python's stdlib `csv` module — no `pip install` required, works in any sandbox.
+       - Filter rows where direction (inferred from `\bCR\b` / `\bDR\b` in `TRAN DESC`) is `CR` and `TRAN DATE` (DD/MM/YYYY) equals the audit date (or T+1..T+3 for cheques).
+       - Apply the same per-slip matching as the Web App (account, amount ±0.01).
+       - Set `Cleared✓` accordingly — verified results are **authoritative**, equal in standing to a Web App match. Add a §6.11 status finding noting the source: `clearance verified via local CSV (mtime: <YYYY-MM-DD HH:MM>); Web App unreachable from this environment`.
+       - If the CSV is missing, older than 36 hours, or empty, defer §6.11 with a structured note: `clearance verification deferred — Web App unreachable AND local CSV <missing/stale at HH:MM>`.
     2. **Per-slip query.** For every proof-of-fund slip, GET:
        ```
        <URL>?token=<TOKEN>&value_date=<YYYY-MM-DD>&account=<account>&amount=<RM>&direction=CR
