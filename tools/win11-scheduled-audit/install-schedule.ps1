@@ -171,11 +171,19 @@ if (-not (Test-Path $claudeShim)) {
 }
 
 try {
-    & $claudeShim --dangerously-skip-permissions -p $prompt 2>&1 | Tee-Object -FilePath $logFile -Append
+    # Pipe the prompt via stdin instead of passing it as -p <prompt>:
+    # cmd.exe's arg parser truncates multi-line strings at the first
+    # newline, so the previous test only sent the first line of the
+    # reference-setup block to claude. claude -p with no inline value
+    # reads the prompt from stdin, where line breaks pass through
+    # cleanly.
+    $prompt | & $claudeShim --dangerously-skip-permissions -p 2>&1 |
+        Tee-Object -FilePath $logFile -Append
     $exitCode = $LASTEXITCODE
 } catch {
     $exitCode = 99
-    "FATAL while invoking claude: $($_.Exception.Message)" | Tee-Object -FilePath $logFile -Append | Write-Error
+    "FATAL while invoking claude: $($_.Exception.Message)" |
+        Tee-Object -FilePath $logFile -Append | Write-Error
 }
 "Finished $((Get-Date).ToString('yyyy-MM-dd HH:mm:ss')) (exit $exitCode)" | Tee-Object -FilePath $logFile -Append
 exit $exitCode
