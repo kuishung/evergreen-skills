@@ -1,6 +1,6 @@
 #requires -Version 5.1
 <#
-  Evergreen Sale Audit — one-shot installer for Windows 11.
+  Evergreen Sale Audit - one-shot installer for Windows 11.
 
   Run once, end to end:
     iwr https://raw.githubusercontent.com/kuishung/evergreen-skills/main/tools/win11-scheduled-audit/install-schedule.ps1 -UseBasicParsing | iex
@@ -14,7 +14,7 @@
        (no XML editing, no GUI).
     5. Offers to run a test invocation immediately.
 
-  Re-running is safe — it overwrites the wrapper / config / task.
+  Re-running is safe - it overwrites the wrapper / config / task.
 #>
 
 $ErrorActionPreference = 'Stop'
@@ -22,7 +22,7 @@ $ErrorActionPreference = 'Stop'
 # ───────────────────────── 1. Pre-flight checks ──────────────────────
 Write-Host ""
 Write-Host "============================================================" -ForegroundColor Green
-Write-Host "  Evergreen Sale Audit — daily 06:30 schedule installer"     -ForegroundColor Green
+Write-Host "  Evergreen Sale Audit - daily 06:30 schedule installer"     -ForegroundColor Green
 Write-Host "============================================================" -ForegroundColor Green
 Write-Host ""
 
@@ -77,7 +77,7 @@ foreach ($pair in @(
     @{ Label = 'AuditOutputRoot'; Path = $AuditOutputRoot }
 )) {
     if (-not (Test-Path $pair.Path)) {
-        $resp = Read-Host "Path doesn't exist: $($pair.Path) — create it now? [Y/n]"
+        $resp = Read-Host "Path doesn't exist: $($pair.Path) - create it now? [Y/n]"
         if ($resp -eq '' -or $resp -match '^[Yy]') {
             New-Item -ItemType Directory -Path $pair.Path -Force | Out-Null
             Write-Host "  Created $($pair.Path)" -ForegroundColor DarkGray
@@ -97,7 +97,7 @@ if (-not (Test-Path $installRoot)) {
 $wrapperPath = Join-Path $installRoot 'run-sale-audit.ps1'
 $configPath  = Join-Path $installRoot 'config.json'
 
-# Persist the config as JSON so the wrapper reads it at run time —
+# Persist the config as JSON so the wrapper reads it at run time -
 # means re-running this installer with new values is the only place
 # that ever changes them.
 @{
@@ -112,7 +112,7 @@ $configPath  = Join-Path $installRoot 'config.json'
 
 Write-Host "[OK] Config written: $configPath" -ForegroundColor DarkGray
 
-# The wrapper itself — small, reads config, builds prompt, calls claude
+# The wrapper itself - small, reads config, builds prompt, calls claude
 $wrapperContent = @'
 $ErrorActionPreference = 'Stop'
 $cfgPath = Join-Path $PSScriptRoot 'config.json'
@@ -163,10 +163,18 @@ Write-Host "[OK] Wrapper written: $wrapperPath" -ForegroundColor DarkGray
 # ───────────────────────── 4. Register the scheduled task ────────────
 $taskName = 'Evergreen Sale Audit Daily'
 
-# Remove any prior version so the installer is idempotent
-$existing = schtasks /Query /TN $taskName 2>$null
-if ($LASTEXITCODE -eq 0) {
-    schtasks /Delete /TN $taskName /F | Out-Null
+# Remove any prior version so the installer is idempotent. schtasks
+# writes to stderr and returns non-zero when the task doesn't exist,
+# which $ErrorActionPreference='Stop' would otherwise treat as fatal.
+$taskExists = $false
+try {
+    $null = & schtasks /Query /TN $taskName 2>&1
+    if ($LASTEXITCODE -eq 0) { $taskExists = $true }
+} catch {
+    # No prior task; that's fine.
+}
+if ($taskExists) {
+    & schtasks /Delete /TN $taskName /F 2>&1 | Out-Null
     Write-Host "[OK] Removed previous schedule." -ForegroundColor DarkGray
 }
 
@@ -200,7 +208,7 @@ if ($test -eq '' -or $test -match '^[Yy]') {
         Write-Host "  Check $($AuditOutputRoot) for the rendered PDFs and" -ForegroundColor DarkGray
         Write-Host "  $($AuditOutputRoot)\_logs\ for the run log." -ForegroundColor DarkGray
     } else {
-        Write-Host "[!!] Test run exited with code $rc — see $($AuditOutputRoot)\_logs\ for details." -ForegroundColor Yellow
+        Write-Host "[!!] Test run exited with code $rc - see $($AuditOutputRoot)\_logs\ for details." -ForegroundColor Yellow
     }
 }
 
