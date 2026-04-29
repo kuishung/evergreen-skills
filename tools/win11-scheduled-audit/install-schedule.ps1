@@ -154,20 +154,24 @@ Write-Host $banner
 # --dangerously-skip-permissions is the documented opt-in for
 # unattended runs: there's no human at 06:30 to answer prompts, and
 # the wrapper is the only thing that ever calls claude in this
-# context, so the trust boundary is the wrapper itself.
-$claudeArgs = @(
-    '--dangerously-skip-permissions',
-    '--add-dir', $Cfg.DailyReportRoot,
-    '-p', $prompt
-)
-if ($Cfg.LocalCsvPath -and $Cfg.LocalCsvPath.Trim().Length -gt 0) {
-    # Insert --add-dir for the CSV folder so its parent is reachable
-    $csvDir = Split-Path -Parent $Cfg.LocalCsvPath
-    if ($csvDir) { $claudeArgs = @('--add-dir', $csvDir) + $claudeArgs }
+# context, so the trust boundary is the wrapper itself. The flag
+# also makes --add-dir redundant -- with permissions skipped,
+# claude can already read/write any path the prompt mentions.
+#
+# Invoke via the .cmd shim explicitly. The .ps1 shim that npm also
+# generates joins args incorrectly when invoked through Tee-Object,
+# turning the array into a single space-joined string that claude
+# then sees as one unknown option. The .cmd shim uses %* which
+# preserves arg boundaries reliably.
+$claudeShim = Join-Path $env:APPDATA 'npm\claude.cmd'
+if (-not (Test-Path $claudeShim)) {
+    # Fall back to whatever resolves on PATH
+    $resolved = Get-Command claude.cmd -ErrorAction SilentlyContinue
+    if ($resolved) { $claudeShim = $resolved.Source } else { $claudeShim = 'claude' }
 }
 
 try {
-    & claude $claudeArgs 2>&1 | Tee-Object -FilePath $logFile -Append
+    & $claudeShim --dangerously-skip-permissions -p $prompt 2>&1 | Tee-Object -FilePath $logFile -Append
     $exitCode = $LASTEXITCODE
 } catch {
     $exitCode = 99
