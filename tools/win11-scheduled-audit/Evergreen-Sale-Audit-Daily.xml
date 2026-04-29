@@ -1,0 +1,63 @@
+<?xml version="1.0" encoding="UTF-16"?>
+<!--
+  Evergreen Sale Audit — Windows Task Scheduler import.
+
+  How to use:
+    1. Edit run-sale-audit.ps1 (CONFIG block) so it has your real paths
+       and Web App token, then drop both files in a stable folder
+       like C:\Tools\evergreen-sale-audit\.
+    2. Edit the <Command> path below if you put the .ps1 anywhere
+       other than C:\Tools\evergreen-sale-audit\run-sale-audit.ps1.
+    3. Edit the <UserId> below to your Windows account name.
+    4. Open Task Scheduler (Win+R → taskschd.msc) → right-click
+       Task Scheduler Library → Import Task → select this XML.
+    5. When prompted, enter the password for the Windows account
+       so the task can run when you're signed out.
+-->
+<Task version="1.4" xmlns="http://schemas.microsoft.com/windows/2004/02/mit/task">
+  <RegistrationInfo>
+    <Description>Daily Evergreen sale audit at 01:30 (TK / BS / BL) via Claude Code.</Description>
+    <URI>\Evergreen Sale Audit Daily</URI>
+  </RegistrationInfo>
+  <Triggers>
+    <CalendarTrigger>
+      <StartBoundary>2026-04-30T01:30:00</StartBoundary>
+      <Enabled>true</Enabled>
+      <ScheduleByDay>
+        <DaysInterval>1</DaysInterval>
+      </ScheduleByDay>
+    </CalendarTrigger>
+  </Triggers>
+  <Principals>
+    <Principal id="Author">
+      <UserId>EDIT-ME-WINDOWS-ACCOUNT-NAME</UserId>
+      <LogonType>Password</LogonType>
+      <RunLevel>LeastPrivilege</RunLevel>
+    </Principal>
+  </Principals>
+  <Settings>
+    <MultipleInstancesPolicy>IgnoreNew</MultipleInstancesPolicy>
+    <DisallowStartIfOnBatteries>false</DisallowStartIfOnBatteries>
+    <StopIfGoingOnBatteries>false</StopIfGoingOnBatteries>
+    <AllowHardTerminate>true</AllowHardTerminate>
+    <StartWhenAvailable>true</StartWhenAvailable>
+    <RunOnlyIfNetworkAvailable>true</RunOnlyIfNetworkAvailable>
+    <IdleSettings>
+      <StopOnIdleEnd>false</StopOnIdleEnd>
+      <RestartOnIdle>false</RestartOnIdle>
+    </IdleSettings>
+    <AllowStartOnDemand>true</AllowStartOnDemand>
+    <Enabled>true</Enabled>
+    <Hidden>false</Hidden>
+    <RunOnlyIfIdle>false</RunOnlyIfIdle>
+    <WakeToRun>true</WakeToRun>
+    <ExecutionTimeLimit>PT1H</ExecutionTimeLimit>
+    <Priority>7</Priority>
+  </Settings>
+  <Actions Context="Author">
+    <Exec>
+      <Command>powershell.exe</Command>
+      <Arguments>-NoProfile -ExecutionPolicy Bypass -File "C:\Tools\evergreen-sale-audit\run-sale-audit.ps1"</Arguments>
+    </Exec>
+  </Actions>
+</Task>

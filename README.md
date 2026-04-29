@@ -34,7 +34,13 @@ Or enable auto-update in `/plugin` → **Marketplaces** tab.
 plugins/<plugin-name>/
   .claude-plugin/plugin.json             plugin manifest (bump version here)
   skills/<skill-name>/SKILL.md           the actual skill
+tools/                                   deployment helpers (not part of the plugin)
+  win11-scheduled-audit/                 Task Scheduler runner for nightly sale-audit
 ```
+
+## Scheduled runs (Windows 11 server)
+
+For unattended daily audits at 01:30, use the Task Scheduler runner under [`tools/win11-scheduled-audit/`](tools/win11-scheduled-audit/README.md). The wrapper PowerShell script + ready-to-import Task Scheduler XML are there with a 7-step setup walkthrough. Cowork's sandbox can't reach `script.google.com` for §6.11 clearance verification, so production schedules belong on the Windows server; Cowork is reserved for interactive ad-hoc work.
 
 ## Maintainer workflow (Kui Shung)
 
