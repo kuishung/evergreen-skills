@@ -136,15 +136,25 @@ if (-not (Get-Command claude -ErrorAction SilentlyContinue)) {
 Set-Location -Path $Cfg.AuditOutputRoot
 
 $stationsCsv = $Cfg.Stations -join ', '
+# IMPORTANT prompt ordering: action first, context second. claude in
+# -p mode is single-turn, and if the first paragraph reads like a
+# task ("Reference setup -- save each as a memory..."), claude
+# treats it as THE task, finishes it, and exits without doing the
+# actual audit. Leading with "Run the daily sale audit..." anchors
+# the work; the reference values follow as supporting context.
 $prompt = @"
-Reference setup -- save each as a `reference` memory if not already saved, and use these values in this run regardless of any older memory:
+TASK: Run the daily sale audit for business date $auditDate across stations $stationsCsv. Render the EN and CH PDFs per station via the deterministic renderer in the sale-audit skill's templates/ folder, and save them under <audit-output-root>/<YYYY>/<YYYY-MM>/<YYYY-MM-DD>/. The audit must produce 6 PDFs total (3 stations x 2 languages).
+
+USE THESE REFERENCE VALUES for this run (override anything in older memory):
 - Daily-report root: $($Cfg.DailyReportRoot)
 - Audit-output root: $($Cfg.AuditOutputRoot)
 - Bank-ledger Web App URL: $($Cfg.WebAppUrl)
 - Bank-ledger Web App token: $($Cfg.WebAppToken)
 - Bank-ledger local CSV path: $($Cfg.LocalCsvPath)
 
-Run the sale-audit skill for business date $auditDate across stations $stationsCsv. Render two PDFs per station (EN and CH) via the deterministic renderer in the skill's templates/ folder. Save them under <audit-output-root>/<YYYY>/<YYYY-MM>/<YYYY-MM-DD>/. Per `§6` rule 11, try the Web App first; on any failure fall back to the local CSV. Do not stop to ask questions -- fail the run and log the reason instead.
+CLEARANCE: Per `§6` rule 11, try the Bank-ledger Web App first. If the Web App fails (network unreachable, token mismatch, 403, etc.), fall back to reading the local CSV at the path above. Only defer `§6.11` if neither source is available.
+
+EXECUTION: Do not stop to ask questions. If any check fails, log the reason and continue to the next check / next station so the run still produces what it can. Exit non-zero only if no PDFs at all could be rendered.
 "@
 
 $banner = "=== Evergreen Sale Audit === $((Get-Date).ToString('yyyy-MM-dd HH:mm:ss')) === audit date $auditDate === stations $stationsCsv ==="
