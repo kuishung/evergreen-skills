@@ -1,7 +1,7 @@
 # ───────────────────────────────────────────────────────────────────
 #  Evergreen Sale Audit — Windows 11 scheduled-task runner.
 #
-#  Designed to be invoked by Task Scheduler at 01:30 daily.
+#  Designed to be invoked by Task Scheduler at 06:30 daily.
 #  Triggers Claude Code in -p (non-interactive) mode against the
 #  evergreen marketplace plugin's `sale-audit` skill, with all four
 #  reference paths pre-stated so the skill never has to ask.

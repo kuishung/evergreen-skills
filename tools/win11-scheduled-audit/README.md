@@ -12,7 +12,9 @@ iwr https://raw.githubusercontent.com/kuishung/evergreen-skills/main/tools/win11
 
 The installer asks for **6 things** (folders, Web App URL + token, run time), writes a wrapper script + config to `%ProgramData%\Evergreen\sale-audit\`, and registers a Task Scheduler entry. Total time ~2 minutes.
 
-It also offers to run a test immediately so you can confirm the audit works end-to-end before tonight's 01:30 fires for real.
+It also offers to run a test immediately so you can confirm the audit works end-to-end before tomorrow morning's 06:30 fires for real.
+
+The 06:30 default is deliberate: the bank-ledger Apps Script trigger fires at 06:00, ingests the overnight AmBank statement emails, and refreshes the local-sync CSV/XLSX exports. The 30-minute gap leaves Google Drive Desktop time to sync those files down before the audit reads them.
 
 ## Pre-flight (do these once before running the installer)
 
@@ -59,7 +61,7 @@ Now run the **Quick install** line above.
 
 ## What this gives you
 
-- Runs nightly at 01:30 (configurable) under your Windows account.
+- Runs every morning at 06:30 (configurable) under your Windows account, auditing yesterday's business date.
 - Reaches `script.google.com` directly — `§6.11` clearance verifies live every night, no deferred slips.
 - Can `pip install` whatever the renderer wants — no sandbox limits.
 - Reads `My Drive/...` for the bank-ledger CSV fallback if you've set that up.

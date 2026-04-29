@@ -40,7 +40,7 @@ tools/                                   deployment helpers (not part of the plu
 
 ## Scheduled runs (Windows 11 server)
 
-For unattended daily audits at 01:30, use the Task Scheduler runner under [`tools/win11-scheduled-audit/`](tools/win11-scheduled-audit/README.md). The wrapper PowerShell script + ready-to-import Task Scheduler XML are there with a 7-step setup walkthrough. Cowork's sandbox can't reach `script.google.com` for §6.11 clearance verification, so production schedules belong on the Windows server; Cowork is reserved for interactive ad-hoc work.
+For unattended daily audits at 06:30 (auditing yesterday's business date, after the 06:00 bank-ledger ingestion has finished), use the Task Scheduler runner under [`tools/win11-scheduled-audit/`](tools/win11-scheduled-audit/README.md). One PowerShell line installs everything: prompts you for the paths and Web App credentials, writes the wrapper, registers the daily task, optionally runs a test. Cowork's sandbox can't reach `script.google.com` for §6.11 clearance verification, so production schedules belong on the Windows server; Cowork is reserved for interactive ad-hoc work.
 
 ## Maintainer workflow (Kui Shung)
 

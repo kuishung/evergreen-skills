@@ -10,7 +10,7 @@
     2. Prompts for the five config values (folders, Web App URL, token).
     3. Writes the wrapper script + a runtime config to
        %ProgramData%\Evergreen\sale-audit\.
-    4. Registers a daily Task Scheduler entry at 01:30 via schtasks.exe
+    4. Registers a daily Task Scheduler entry at 06:30 via schtasks.exe
        (no XML editing, no GUI).
     5. Offers to run a test invocation immediately.
 
@@ -22,7 +22,7 @@ $ErrorActionPreference = 'Stop'
 # ───────────────────────── 1. Pre-flight checks ──────────────────────
 Write-Host ""
 Write-Host "============================================================" -ForegroundColor Green
-Write-Host "  Evergreen Sale Audit — daily 01:30 schedule installer"     -ForegroundColor Green
+Write-Host "  Evergreen Sale Audit — daily 06:30 schedule installer"     -ForegroundColor Green
 Write-Host "============================================================" -ForegroundColor Green
 Write-Host ""
 
@@ -63,11 +63,11 @@ $AuditOutputRoot = Read-WithDefault 'Audit-output root path' 'C:\Users\KS\DATA\E
 $LocalCsvPath    = Read-WithDefault 'Bank-ledger local CSV path (for fallback; can be empty)' ''
 $WebAppUrl       = Read-WithDefault 'Bank-ledger Web App URL'   ''
 $WebAppToken     = Read-WithDefault 'Bank-ledger Web App token' ''
-$RunTime         = Read-WithDefault 'Daily run time (HH:mm 24h)' '01:30'
+$RunTime         = Read-WithDefault 'Daily run time (HH:mm 24h)' '06:30'
 
 # Sanity-check the run time
 if ($RunTime -notmatch '^\d{2}:\d{2}$') {
-    Write-Host "ERROR: time must look like HH:mm (e.g., 01:30)." -ForegroundColor Red
+    Write-Host "ERROR: time must look like HH:mm (e.g., 06:30)." -ForegroundColor Red
     exit 2
 }
 
