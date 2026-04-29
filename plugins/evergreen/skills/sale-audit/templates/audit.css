@@ -36,8 +36,8 @@
   --slice-budi:        #B65A28;
 
   /* Type sizes (treat as floors; print scaling depends on @page) */
-  --fs-title:          18pt;
-  --fs-headline-num:   24pt;
+  --fs-title:          15pt;
+  --fs-headline-num:   22pt;
   --fs-section-band:   11pt;
   --fs-card-head:      10.5pt;
   --fs-body:           9pt;
@@ -85,10 +85,11 @@ html, body {
 .title-band {
   background: var(--brand-dark);
   color: #fff;
-  padding: 5mm 6mm;
+  padding: 4mm 6mm;
   font-size: var(--fs-title);
   font-weight: 700;
-  letter-spacing: 0.2px;
+  letter-spacing: 0.1px;
+  line-height: 1.2;
   margin: 0;
 }
 
@@ -133,10 +134,11 @@ html, body {
   color: #fff;
   padding: 4mm 6mm;
   display: grid;
-  grid-template-columns: 1fr 1fr 1fr;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1fr);
   gap: 6mm;
   margin: 0 0 1mm 0;
 }
+.headline-panel > * { min-width: 0; overflow: hidden; }
 .headline-panel .h-label  { font-size: 8.5pt; opacity: 0.78; margin-bottom: 1mm; }
 .headline-panel .h-amount { font-size: var(--fs-headline-num); font-weight: 700; }
 .headline-caption {
@@ -146,12 +148,16 @@ html, body {
 }
 
 /* --- 8. Two-column card row (Revenue + CFP Deposit) ---------------- */
+/* minmax(0, …) so a wide table or long footer note inside a card
+   never pushes the grid items past their allocated columns and into
+   the page margin. Same trick on every grid below. */
 .card-row {
   display: grid;
-  grid-template-columns: 1.85fr 1fr;
+  grid-template-columns: minmax(0, 1.85fr) minmax(0, 1fr);
   gap: 4mm;
   margin: 0 0 4mm 0;
 }
+.card-row > *  { min-width: 0; }
 
 .card {
   background: var(--bg-card);
@@ -263,17 +269,19 @@ tr.variance           { background: var(--variance-bg) !important; }
 /* --- 10. Channel-totals + donut grid ------------------------------- */
 .channels-row {
   display: grid;
-  grid-template-columns: 2.4fr 1fr;
+  grid-template-columns: minmax(0, 2.4fr) minmax(0, 1fr);
   gap: 4mm;
   align-items: start;
   margin: 4mm 0;
 }
+.channels-row > * { min-width: 0; }
 
 /* Donut chart via conic-gradient. Slice ranges set inline (style="..."). */
 .donut-wrap { display: flex; flex-direction: column; align-items: center; }
 .donut-title { font-size: 9pt; font-weight: 700; color: var(--text-muted); margin-bottom: 2mm; }
 .donut {
-  width: 36mm; height: 36mm;
+  width: 30mm; height: 30mm;
+  max-width: 100%;
   border-radius: 50%;
   position: relative;
 }
@@ -297,10 +305,11 @@ tr.variance           { background: var(--variance-bg) !important; }
 /* --- 11. Cash + Fuel side-by-side row ------------------------------ */
 .split-50 {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
   gap: 4mm;
   margin: 0 0 4mm 0;
 }
+.split-50 > * { min-width: 0; }
 
 .note {
   font-size: 8pt;
