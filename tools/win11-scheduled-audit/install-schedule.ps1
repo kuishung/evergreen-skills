@@ -100,14 +100,24 @@ $configPath  = Join-Path $installRoot 'config.json'
 # Persist the config as JSON so the wrapper reads it at run time -
 # means re-running this installer with new values is the only place
 # that ever changes them.
+#
+# WaitForBankLedger / WaitMaxRetries / WaitMinutesBetweenRetries
+# control the "don't run until yesterday's credits are ingested"
+# behaviour. Default is wait up to 4 retries x 30 min = 2 hours
+# from the scheduled fire time before giving up and running the
+# audit anyway with section 6.11 deferred. Set WaitForBankLedger to
+# $false (here, then re-run the installer) to disable the wait.
 @{
-    DailyReportRoot = $DailyReportRoot
-    AuditOutputRoot = $AuditOutputRoot
-    LocalCsvPath    = $LocalCsvPath
-    WebAppUrl       = $WebAppUrl
-    WebAppToken     = $WebAppToken
-    AuditOffsetDays = -1
-    Stations        = @('TK', 'BS', 'BL')
+    DailyReportRoot           = $DailyReportRoot
+    AuditOutputRoot           = $AuditOutputRoot
+    LocalCsvPath              = $LocalCsvPath
+    WebAppUrl                 = $WebAppUrl
+    WebAppToken               = $WebAppToken
+    AuditOffsetDays           = -1
+    Stations                  = @('TK', 'BS', 'BL')
+    WaitForBankLedger         = $true
+    WaitMaxRetries            = 4
+    WaitMinutesBetweenRetries = 30
 } | ConvertTo-Json | Set-Content -Path $configPath -Encoding UTF8
 
 Write-Host "[OK] Config written: $configPath" -ForegroundColor DarkGray
@@ -168,6 +178,48 @@ EXECUTION: Do not stop to ask questions. If any check fails, log the reason and 
 $banner = "=== Evergreen Sale Audit === $((Get-Date).ToString('yyyy-MM-dd HH:mm:ss')) === audit date $auditDate === stations $stationsCsv ==="
 Add-Content -Path $logFile -Value $banner
 Write-Host $banner
+
+# Wait for the bank-ledger to have yesterday's credits before running.
+# AmBank emails the daily statement at variable times overnight; if
+# the audit fires before the email arrives, every slip's clearance
+# is "deferred" and the report is less useful. Polling here keeps
+# the audit single-shot from Task Scheduler's view but lets the
+# wrapper retry up to N times before giving up.
+function Test-BankLedgerReady {
+    param([string]$Url, [string]$Token, [string]$Date)
+    if ([string]::IsNullOrWhiteSpace($Url) -or [string]::IsNullOrWhiteSpace($Token)) { return $false }
+    try {
+        $u = "$Url`?token=$Token&value_date=$Date&direction=CR"
+        $resp = Invoke-RestMethod -Uri $u -TimeoutSec 30 -UseBasicParsing
+        if ($resp.ok -and $resp.total_count -gt 0) { return $true }
+        return $false
+    } catch {
+        return $false
+    }
+}
+
+if ($Cfg.WaitForBankLedger) {
+    $maxRetries  = [int]$Cfg.WaitMaxRetries
+    $waitMinutes = [int]$Cfg.WaitMinutesBetweenRetries
+    $attempt     = 0
+    while ($true) {
+        if (Test-BankLedgerReady -Url $Cfg.WebAppUrl -Token $Cfg.WebAppToken -Date $auditDate) {
+            "Bank-ledger ready: $auditDate has credits ingested. Proceeding to audit." |
+                Tee-Object -FilePath $logFile -Append
+            break
+        }
+        if ($attempt -ge $maxRetries) {
+            "Bank-ledger NOT ready after $attempt retries (~$($attempt * $waitMinutes) min). Running audit anyway; section 6.11 will defer." |
+                Tee-Object -FilePath $logFile -Append
+            break
+        }
+        $attempt++
+        $next = (Get-Date).AddMinutes($waitMinutes).ToString('HH:mm:ss')
+        "Bank-ledger does not yet have $auditDate credits. Sleeping $waitMinutes min, retry $attempt/$maxRetries at $next." |
+            Tee-Object -FilePath $logFile -Append
+        Start-Sleep -Seconds ($waitMinutes * 60)
+    }
+}
 
 # --dangerously-skip-permissions is the documented opt-in for
 # unattended runs: there's no human at 06:30 to answer prompts, and

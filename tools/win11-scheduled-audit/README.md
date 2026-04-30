@@ -59,6 +59,14 @@ Now run the **Quick install** line above.
 | `run-sale-audit.ps1` | Older standalone wrapper — kept for compatibility. The installer writes its own copy under `%ProgramData%\Evergreen\sale-audit\` from a config-driven template, so you don't normally use this one directly. |
 | `Evergreen-Sale-Audit-Daily.xml` | Task Scheduler import for the manual / GUI path. The installer registers via `schtasks.exe` instead, which is faster and skips the XML editing. Keep around if you prefer Task Scheduler GUI. |
 
+## Behaviour: "wait for the bank-ledger before auditing"
+
+When 06:30 hits, the wrapper first **pings the bank-ledger Web App** to check whether yesterday's credits have been ingested. If yes — runs the audit immediately. If no — sleeps 30 min, retries up to 4 times, then gives up and runs the audit anyway (with `§6.11` deferred for that day).
+
+This protects against the AmBank email arriving late. If the bank statement lands at, say, 07:15, the wrapper that fired at 06:30 catches it on its second retry at 07:00 and the audit runs cleanly.
+
+Maximum delay from scheduled fire to audit start: `WaitMaxRetries × WaitMinutesBetweenRetries` = 4 × 30 min = 2 hours by default. Edit `%ProgramData%\Evergreen\sale-audit\config.json` to change those values, or set `WaitForBankLedger: false` to disable the wait entirely and run immediately every time.
+
 ## What this gives you
 
 - Runs every morning at 06:30 (configurable) under your Windows account, auditing yesterday's business date.
