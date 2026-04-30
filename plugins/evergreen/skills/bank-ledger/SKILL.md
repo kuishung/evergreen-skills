@@ -1,8 +1,8 @@
 ---
 name: bank-ledger
 description: Use this skill whenever the user (Evergreen back-office) wants to maintain or query the master bank-ledger Google Sheet — the canonical record of every credit and debit hitting the six approved Maybank/AmBank accounts. Triggers include "refresh bank ledger", "import bank transactions", "check ledger", "show unmatched credits", "set up bank ledger", "tune bank-ledger parser", or any task involving incoming bank statement attachments or daily reconciliation against the master sheet.
-version: 0.4.0
-updated: 2026-04-29 08:10
+version: 0.4.1
+updated: 2026-05-01 07:49
 ---
 
 # Bank Ledger — Evergreen Master Transaction Sheet
@@ -76,7 +76,7 @@ When the user asks the skill questions in chat:
 2. To answer "show today's credits", "any unmatched credits this week?", "is RM 350 on 2026-04-25 in the ledger?", call the Web App with the right query parameters (see §7 below) and parse the JSON.
 3. Never mutate the sheet from the skill. Only the Apps Script writes (avoids race conditions with the daily ingestion).
 
-## 6. Workflow — automatic (daily 06:00, no human)
+## 6. Workflow — automatic (every 30 minutes, no human)
 
 Runs entirely inside Google — no Claude session, no server cron. The Apps Script function `fetchAmBankToSheet` does this loop:
 
@@ -201,11 +201,11 @@ This folder is what gets mirrored to your local disk by Google Drive Desktop. Sa
 3. Property value: a long random string (≥32 chars). Generate at <https://passwordsgenerator.net/>; save it somewhere safe — you'll paste it into Claude memory in §8.6.
 4. Save.
 
-### 8.4 Schedule the daily 06:00 trigger
+### 8.4 Schedule the every-30-minutes trigger
 
 1. In the Apps Script editor, select function **`setupTrigger`** from the dropdown.
 2. **Run**. Grant Gmail / Sheets / external request permissions on first consent (one-time).
-3. The script wipes any existing triggers in this project and creates a single daily 06:00 trigger calling `fetchAmBankToSheet`. Verify in the **clock icon (Triggers)** sidebar that exactly one trigger exists.
+3. The script wipes any existing triggers in this project and creates a single time-based trigger calling `fetchAmBankToSheet` **every 30 minutes**. Verify in the **clock icon (Triggers)** sidebar that exactly one trigger exists with `Time-driven · Minutes timer · Every 30 minutes`. The 30-minute cadence catches late-arriving AmBank emails (sometimes hours after the nightly cut-off) without reworking already-processed messages — the script's Gmail-message-id dedup makes repeat runs cheap.
 
 ### 8.5 Deploy as a Web App (the query API)
 

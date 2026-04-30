@@ -213,16 +213,24 @@ function markDone_(id) {
   }
 }
 
-// ── Run ONCE to create the daily 06:00 trigger ─────────────────
+// ── Run ONCE to create the every-30-minutes trigger ───────────
+//
+// Polls every 30 minutes so late-arriving AmBank emails (sometimes
+// delivered hours after the nightly cut-off) get ingested promptly.
+// The dedup-by-Gmail-message-id in fetchAmBankToSheet means repeat
+// runs cost nothing — already-processed emails are skipped, so the
+// "every 30 minutes" cadence catches new ones without reworking
+// old ones. Comfortably within Apps Script's free-tier 90-min/day
+// runtime quota (each run is typically a few seconds when there
+// is nothing new).
 
 function setupTrigger() {
   ScriptApp.getProjectTriggers().forEach(function (t) { ScriptApp.deleteTrigger(t); });
   ScriptApp.newTrigger('fetchAmBankToSheet')
     .timeBased()
-    .atHour(6)
-    .everyDays(1)
+    .everyMinutes(30)
     .create();
-  Logger.log('Daily 06:00 trigger created.');
+  Logger.log('Trigger created: fetchAmBankToSheet every 30 minutes.');
 }
 
 // ── Debug utilities ────────────────────────────────────────────
