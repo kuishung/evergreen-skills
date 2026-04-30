@@ -1,8 +1,8 @@
 ---
 name: sale-audit
 description: Use this skill whenever the user (Evergreen back-office / management) wants to audit, verify, or check the daily sale submission of a petrol station — TK (Tg. Kapor), BS (Berkat Setia), or BL (Bubul Lama). Triggers include phrases like "audit TK", "audit sale", "check BS sale", "verify fund report", "run daily audit", "daily sale audit for <date>", or any request to reconcile a station's Fund Report against its supporting documents and produce an audit PDF.
-version: 0.12.1
-updated: 2026-04-30 07:13
+version: 0.13.0
+updated: 2026-04-30 11:30
 ---
 
 # Sale Audit — Evergreen Petrol Stations
@@ -87,7 +87,7 @@ Run every check. Flag every failure.
 3. **Cash balance.** Compute opening cash + today's cash collected − today's deposits = expected closing cash. Compare against Fund Report's closing cash and flag any variance.
 4. **Date match.** Every proof-of-fund document must bear the same date as the Fund Report. Reject any older slip used to pad today's revenue.
 5. **Distinct documents.** No two proof-of-fund documents may be identical or duplicated (same slip reused).
-6. **Correct account.** Deposits must land in one of the six bank accounts in §2.
+6. **Correct account — read it off the slip, never infer.** For every proof-of-fund slip, the destination account is determined **only** by reading the **account number printed on the slip image** and matching it to one of the six accounts in §2. Do **not** infer the bank from filename text, FR section label (e.g. "We Direct Bank-in"), station-banking conventions, prior memory, or shortcut assumptions — these are unreliable and have produced wrong classifications in the past. Render the actual account in the PDF's `Acct` column as bank + last-4 (e.g. `MBB 5366`, `AMB 8146`), not generic labels like `MBB (CDM)`. If the printed account number is illegible, mark `Acct = ?`, set `Cleared✓ = ✗`, and raise a §6 finding requiring a clearer slip image — never guess. A slip whose printed account is **outside** the six approved accounts in §2 is an automatic finding.
 7. **POS tally.** GreenPOS, Autocount POS, and iBing FeedMePOS totals (system-generated → source of truth) must match the Fund Report totals.
 8. **Channel tally.** Per-channel revenue in proof-of-fund must match the per-channel split in the POS systems.
 9. **CFP vs. GreenPOS voucher.** Sum of the CFP report's **voucher-usage lines only** (redemptions against pre-paid balance) must tally with the GreenPOS voucher line. CFP top-ups are deposits (§5.2) and are **excluded** from this tally — if a day's "CFP total" matches only when top-ups are included, someone has mis-classified a deposit as revenue.
