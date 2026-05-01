@@ -45,7 +45,10 @@
 <head>
 <meta charset="utf-8">
 <title>{{ data.station.code }} {{ labels.title_suffix }} {{ data.business_date }}</title>
-<link rel="stylesheet" href="audit.css">
+{# CSS is inlined by render-audit.py so the HTML is fully self-contained
+   (no co-located audit.css needed). This is what lets anthropic-skills:pdf
+   produce a styled PDF regardless of the scratch HTML's working directory. #}
+<style>{{ audit_css|safe }}</style>
 </head>
 <body>
 

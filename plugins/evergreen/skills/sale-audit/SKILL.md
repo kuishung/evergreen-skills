@@ -1,8 +1,8 @@
 ---
 name: sale-audit
 description: Use this skill whenever the user (Evergreen back-office / management) wants to audit, verify, or check the daily sale submission of a petrol station — TK (Tg. Kapor), BS (Berkat Setia), or BL (Bubul Lama). Triggers include phrases like "audit TK", "audit sale", "check BS sale", "verify fund report", "run daily audit", "daily sale audit for <date>", or any request to reconcile a station's Fund Report against its supporting documents and produce an audit PDF.
-version: 0.15.0
-updated: 2026-05-01 09:00
+version: 0.15.1
+updated: 2026-05-01 10:30
 ---
 
 # Sale Audit — Evergreen Petrol Stations
@@ -166,7 +166,7 @@ The renderer reads `version:` from this `SKILL.md`'s frontmatter for the sale-au
 
 PDF rendering is split in two so the pipeline runs in any environment that has Python + Jinja2, regardless of whether `weasyprint` is installed:
 
-1. **JSON → HTML** via `render/render-audit.py` (Jinja2 only, zero PDF dependencies).
+1. **JSON → HTML** via `render/render-audit.py` (Jinja2 only, zero PDF dependencies). The renderer reads `templates/audit.css` and **inlines it** into the HTML as a `<style>` block; the produced HTML is therefore fully self-contained and does not depend on any sibling file. **Do not** re-introduce a `<link rel="stylesheet" href="audit.css">` in the template — when the scratch HTML is handed to the PDF rasterizer, that relative href fails to resolve and the result is an unstyled "plain" PDF (this regression hit on 2026-05-01 between v0.14.0 and v0.15.0; the inlining fix is v0.15.1).
 2. **HTML → PDF** via the `anthropic-skills:pdf` skill (already available in every Claude environment, including sandboxed Cowork sessions where `pip install weasyprint` is blocked by network policy).
 
 Concrete sequence per audit:

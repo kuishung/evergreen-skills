@@ -149,8 +149,18 @@ def main():
     )
     env.filters["roman"] = to_roman
 
+    # Read audit.css and inline it into the template. The HTML must be
+    # self-contained because step 2 of the production flow hands it to
+    # anthropic-skills:pdf at a scratch path; a relative <link href="audit.css">
+    # would not resolve and the rasterizer would emit an unstyled "plain"
+    # PDF (this regression bit us on 2026-05-01 — see SKILL.md §7.1).
+    audit_css_path = templates_dir / "audit.css"
+    if not audit_css_path.exists():
+        sys.exit(f"audit.css not found at {audit_css_path}")
+    audit_css = audit_css_path.read_text(encoding="utf-8")
+
     template = env.get_template("audit.html.j2")
-    html = template.render(data=data, labels=labels)
+    html = template.render(data=data, labels=labels, audit_css=audit_css)
 
     suffix = out_path.suffix.lower()
     if suffix == ".html":
