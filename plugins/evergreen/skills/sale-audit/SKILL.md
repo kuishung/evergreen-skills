@@ -1,8 +1,8 @@
 ---
 name: sale-audit
 description: Use this skill whenever the user (Evergreen back-office / management) wants to audit, verify, or check the daily sale submission of a petrol station — TK (Tg. Kapor), BS (Berkat Setia), or BL (Bubul Lama). Triggers include phrases like "audit TK", "audit sale", "check BS sale", "verify fund report", "run daily audit", "daily sale audit for <date>", or any request to reconcile a station's Fund Report against its supporting documents and produce an audit PDF.
-version: 0.15.1
-updated: 2026-05-01 10:30
+version: 0.16.0
+updated: 2026-05-01 18:00
 ---
 
 # Sale Audit — Evergreen Petrol Stations
@@ -205,4 +205,5 @@ The renderer fills the template; the LLM's job is to produce the data values. Fo
 3. List files present vs. missing for that station+date.
 4. Run all §6 checks, preserving every intermediate calculation.
 5. Build the audit-data JSON object per §7's data contract (`templates/audit-data.schema.md`). Every required field must be populated; partial data is a bug, not a degraded output. Write the JSON to a scratch path. **For each language (en, cn):** run `render-audit.py --data <json> --lang <lang> --out <scratch>_<LANG>.html` to produce deterministic Jinja2-substituted HTML, then invoke `anthropic-skills:pdf` on that HTML (A4 landscape) to write `<audit-output-root>/<YYYY>/<YYYY-MM>/<YYYY-MM-DD>/<Station>-<YYYY_MM_DD>-Audit_<YYYYMMDD>_<hh>_<mm>_<Lang>.pdf`. Create the date tree if missing. Delete the scratch JSON and the scratch HTML files when both PDFs are written. Produce no other files. **If `render-audit.py` errors at any point, fail the run** — never substitute an LLM-rendered or ReportLab-rendered PDF; the visual must be byte-stable across runs.
-6. Reply in chat with the 3–5 most material findings and the absolute paths to both saved PDFs.
+6. **Notify via WhatsApp (best-effort, non-blocking).** Once both PDFs are written for a station, invoke the `whatsapp-send` skill — once per station, not once per language — to push a short notification to the recipients listed in the `WhatsApp recipients` reference memory. Pass the station code, business date, list of PDF absolute paths, and a 3–5 bullet summary of the most material §6 findings (same content as step 7's chat reply). The skill filters recipients by `Stations` ∋ this station, `Reports` ∋ `sale-audit`, and any `Languages` setting; reads Twilio credentials from the local-only path saved in memory; and sends one WhatsApp text per recipient that points at the audit-output folder (Drive URL if memory has one, else local path). **If the send fails for any reason** (creds missing, Twilio error, network), log the failure and continue — the audit itself is **still successful** because the PDFs are on disk. Never raise a WhatsApp failure as a §6 audit finding (it's an operational issue, not an audit issue).
+7. Reply in chat with the 3–5 most material findings, the absolute paths to both saved PDFs, and a one-line WhatsApp send result (e.g., `WhatsApp: 3/3 delivered` or `WhatsApp: send failed — see log`).
