@@ -1,8 +1,8 @@
 ---
 name: sale-audit
 description: Use this skill whenever the user (Evergreen back-office / management) wants to audit, verify, or check the daily sale submission of a petrol station — TK (Tg. Kapor), BS (Berkat Setia), or BL (Bubul Lama). Triggers include phrases like "audit TK", "audit sale", "check BS sale", "verify fund report", "run daily audit", "daily sale audit for <date>", or any request to reconcile a station's Fund Report against its supporting documents and produce an audit PDF.
-version: 0.14.0
-updated: 2026-04-30 11:50
+version: 0.15.0
+updated: 2026-05-01 09:00
 ---
 
 # Sale Audit — Evergreen Petrol Stations
@@ -155,12 +155,12 @@ Files involved (all inside this skill folder):
 
 Never overwrite or delete an older file in that folder. Re-running the audit on the same business date produces a **new** pair whose `Audit_…` timestamp differs, so every run is preserved side-by-side.
 
-**Footer stamp** is rendered automatically by the template on every page, bottom-right:
+**Footer stamp** is rendered automatically by the template on **every** page, bottom-right (single source of truth — declared once in the template as a `position: running(footer)` element, replayed by the CSS `@page @bottom-right` rule on every printed page):
 
-- English: `sale-audit v<version> · amended <updated> · generated <YYYY-MM-DD hh:mm>`
-- Chinese: `sale-audit v<version> · 修订 <updated> · 生成 <YYYY-MM-DD hh:mm>`
+- English: `sale-audit v<version> · bank-ledger v<bl-version> · generated <YYYY-MM-DD hh:mm>`
+- Chinese: `sale-audit v<version> · bank-ledger v<bl-version> · 生成 <YYYY-MM-DD hh:mm>`
 
-The renderer reads `version:` and `updated:` from this `SKILL.md`'s frontmatter and stamps `generated_at` from `datetime.now()` at run time, so all three fields are dynamic — every audit's footer reflects the actual skill release that produced it. Footer baseline sits at 3 mm above the page edge; the bottom 17 mm of every page is reserved for it.
+The renderer reads `version:` from this `SKILL.md`'s frontmatter for the sale-audit version, `version:` from the **sibling** `../bank-ledger/SKILL.md` frontmatter for the bank-ledger version (so the user can tell at a glance which clearance pipeline produced the day's `Cleared✓` results), and stamps `generated_at` from `datetime.now()` at run time. The amended date is **not** in the footer — the version number alone identifies the release. Footer baseline sits at 3 mm above the page edge; the bottom 17 mm of every page is reserved for it.
 
 ### 7.1 Render workflow — two steps, deterministic, environment-portable
 
@@ -189,13 +189,14 @@ Concrete sequence per audit:
 The renderer fills the template; the LLM's job is to produce the data values. For every section, populate every field documented in `audit-data.schema.md`. Notes that are content-level (not structural):
 
 - **Section 1 inflow breakdown.** Three headline figures — Total Inflow, Revenue, CFP Deposit — must always reconcile (Total = Revenue + CFP Deposit). The four revenue channels (Cash, Merchant, CFP voucher used, BUDI95) must always appear even if zero. For BUDI95 the `notes` field must split customer-paid portion vs. IPTB-claimable portion.
+- **Section 1 revenue segments.** The segments table (`revenue.segments`) lists the per-business-line split — **Fuel**, **Buraqmart**, **Rental**, and (TK only) **iBing**. **iBing and Rental are always separate rows; never combine them into a single "iBing / Rental" row.** Per §1: TK has all four segments; BS and BL have Fuel + Buraqmart + Rental only (no iBing row at all — do not emit a zero-amount iBing row for BS or BL).
 - **Section 1 fuel-delivery callout.** When a fuel delivery occurred, set `delivery.occurred = true` and put invoice / ticket / SN in `delivery.summary`. Otherwise omit the object or set `occurred = false`.
-- **Section 2 proof-of-fund.** **One row per individual slip** — never collapse multiple slips into a single row even when the Fund Report aggregates them. `cleared.kind` is one of `verified` / `deferred` / `missing`. `in_fr` is `ok` / `agg` / `missing`. The column-key legend is rendered automatically by the template using strings from `labels-{en,cn}.json`. The FR-aggregation sub-table is omitted when `fr_aggregation` is empty.
-- **Section 3 cash highlight.** Six rows in this order: Opening cash, Cash revenue (POS), CFP cash top-up, BuraqMart cash, Safeguards (CDM) pick-up, Closing cash. Set `is_total: true` on Closing cash; set `is_variance: true` on any row where `var != 0`. The optional `footer_note` is free text below the table for context (e.g., explaining a misposted FR cell).
+- **Section 2 proof-of-fund.** **One row per individual slip** — never collapse multiple slips into a single row even when the Fund Report aggregates them. `cleared.kind` is one of `verified` / `deferred` / `missing`. `in_fr` is `ok` / `agg` / `missing`. The column-key legend is rendered automatically by the template using strings from `labels-{en,cn}.json`. The FR-aggregation sub-table is omitted when `fr_aggregation` is empty; otherwise it must include `fr_aggregation_total` (the column sums) — the renderer paints it as a Total row at the foot of the table. The auto-rendered caption above the table defines `FR amount` (the figure printed on that line of the Fund Report — usually a single cell summing several slips) vs `Sum of slips` (the actual total of the proof-of-fund slips this audit attributes to that same line); the Total row should reconcile against the corresponding channel total in Section 1, and any discrepancy between the two columns on a row is staff arithmetic the back-office must reconcile.
+- **Section 3 cash highlight.** Six rows in this order: Opening cash, Cash revenue (POS), CFP cash top-up, BuraqMart cash, Safeguards (CDM) pick-up, Closing cash. Set `is_total: true` on Closing cash; set `is_variance: true` on any row where `var != 0`. Each row's `Computed` value is derived from a fixed formula documented in the auto-rendered legend the template prints under the table (`labels.section_3.computed_legend`) — populate the row values to match those formulas exactly. **CFP cash top-up = sum of CFP-report top-up entries whose payment mode is `cash` only**; bank-transfer / e-wallet top-ups are excluded and a station with bank-transfer-only top-ups (typical for TK on most days) will correctly show `Computed = 0` here. The optional `footer_note` is free text below the legend for **station-specific context** when something on a Computed value needs explanation beyond the legend (e.g., "today's only CFP top-up was Touch'nGo bank transfer, so the cash-only line is 0", or "FR posted yesterday's pick-up under today's date — see FINDING III").
 - **Section 4 fuel quantity.** One row per fuel product. The L-fields are pre-formatted strings (`"17,176"`, `"DELIV 16,500"`) so qualifiers like `*` or `DELIV` come through verbatim.
 - **Section 4b POS tally.** Each row sets `passed: true | false`; the renderer paints failed rows red and styles the result text accordingly. Include at minimum: GreenPOS fuel total, CFP voucher vs GreenPOS, Merchant fuel, Autocount Mart, BUDI95 sales (POS).
 - **Section 5 §4 checklist.** Single HTML string (`<strong>` allowed for `Present:` / `Partial:` / `Missing:` / `N/A:` keywords) referencing the file list in §4.
-- **Section 6 findings.** Ordered by materiality (financial impact first, control weakness second, presentation issues last). **Always include a closing finding for each of `§6.11` (clearance status) and `§6.12` (aggregation integrity)**, even when clean — so the reader can confirm those checks ran.
+- **Section 6 findings.** Ordered by materiality (financial impact first, control weakness second, presentation issues last). The renderer numbers findings as upper-case Roman numerals (FINDING I, II, III, …) — `f.n` is still the integer 1, 2, 3 in the JSON; the template applies the `| roman` filter at render time. **Always include a closing finding for each of `§6.11` (clearance status) and `§6.12` (aggregation integrity)**, even when clean — so the reader can confirm those checks ran. **Cross-references are mandatory.** Whenever any other row in the report (a `notes` cell on a slip, a status note in §2/§3/§4b, etc.) refers the reader to a finding, it must name the finding by its Roman number — write `see FINDING IV` (or `cf. FINDING II, III`), never the bare phrase "see notes" or "see findings". The reader needs to be able to jump straight to the right bullet without hunting.
 
 ## 8. Workflow
 

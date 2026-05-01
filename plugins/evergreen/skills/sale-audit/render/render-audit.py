@@ -49,6 +49,35 @@ def load_json(path: Path):
     return json.loads(path.read_text(encoding="utf-8"))
 
 
+def to_roman(n) -> str:
+    """Convert an int (or numeric string) to upper-case Roman numerals.
+
+    Used by the findings list so each finding gets a stable, easy-to-cite
+    label (FINDING I, II, III, ...). Other rows in the report can then
+    cross-reference like "see FINDING IV" without ambiguity.
+
+    Returns the input unchanged if it isn't a positive integer in [1, 3999].
+    """
+    try:
+        n = int(n)
+    except (TypeError, ValueError):
+        return str(n)
+    if n < 1 or n > 3999:
+        return str(n)
+    pairs = [
+        (1000, "M"), (900, "CM"), (500, "D"), (400, "CD"),
+        (100, "C"),  (90,  "XC"), (50,  "L"), (40,  "XL"),
+        (10,  "X"),  (9,   "IX"), (5,   "V"), (4,   "IV"),
+        (1,   "I"),
+    ]
+    out = []
+    for value, sym in pairs:
+        while n >= value:
+            out.append(sym)
+            n -= value
+    return "".join(out)
+
+
 def read_skill_frontmatter(skill_md_path: Path):
     """Extract version: and updated: lines from SKILL.md frontmatter."""
     if not skill_md_path.exists():
@@ -101,6 +130,14 @@ def main():
     fm_version, fm_updated = read_skill_frontmatter(skill_md)
     data.setdefault("skill_version", args.skill_version or fm_version or "unknown")
     data.setdefault("skill_updated", args.skill_updated or fm_updated or "unknown")
+
+    # Read the sibling bank-ledger SKILL.md so the footer can stamp the
+    # bank-ledger version that produced today's clearance data. The plugin
+    # layout is .../plugins/evergreen/skills/{sale-audit,bank-ledger}/SKILL.md
+    bank_ledger_md = (here.parent.parent / "bank-ledger" / "SKILL.md").resolve()
+    bl_version, _bl_updated = read_skill_frontmatter(bank_ledger_md)
+    data.setdefault("bank_ledger_version", bl_version or "unknown")
+
     data.setdefault("generated_at", datetime.now().strftime("%Y-%m-%d %H:%M"))
     data.setdefault("language", args.lang)
 
@@ -110,6 +147,7 @@ def main():
         trim_blocks=True,
         lstrip_blocks=True,
     )
+    env.filters["roman"] = to_roman
 
     template = env.get_template("audit.html.j2")
     html = template.render(data=data, labels=labels)

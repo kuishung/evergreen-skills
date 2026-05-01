@@ -49,6 +49,17 @@
 @page {
   size: A4 landscape;
   margin: 6mm 8mm 17mm 8mm;   /* 17 mm bottom reserve for the footer stamp */
+
+  /* Running footer — repeats automatically on every printed page.
+     The .page-footer element below is hoisted out of the body flow
+     by `position: running(footer)` and replayed here. */
+  @bottom-right {
+    content: element(footer);
+    margin-right: 8mm;
+    margin-bottom: 3mm;
+    font-size: var(--fs-footer);
+    color: var(--footer-grey);
+  }
 }
 
 @media print {
@@ -125,6 +136,10 @@ html, body {
   font-weight: 700;
   margin: 4mm 0 2mm 0;
   color: var(--text);
+  /* Never leave a section heading alone at the bottom of a page —
+     keep the heading with at least the next block of content. */
+  break-after: avoid-page;
+  page-break-after: avoid;
 }
 .section-band.dark  { background: var(--brand-dark); color: #fff; }
 
@@ -233,6 +248,13 @@ table.audit tr.total td {
   border-bottom: none;
   background: var(--bg-card);
 }
+/* Explicit right-align on numeric tfoot/total cells — the
+   selector chain (tr:nth-child(even) td, etc.) above can override
+   the default num-class alignment. Re-assert it here. */
+table.audit tfoot td.num,
+table.audit tr.total td.num {
+  text-align: right;
+}
 
 /* Inline share bar inside Segment table — uses a % fill so it scales
    with whatever width the table column ends up at. */
@@ -273,11 +295,27 @@ tr.variance           { background: var(--variance-bg) !important; }
   gap: 4mm;
   align-items: start;
   margin: 4mm 0;
+  /* Avoid splitting the row across pages where possible. If the
+     content is genuinely too tall, the engine will still break — but
+     not in the middle of the donut. */
+  break-inside: avoid;
+  page-break-inside: avoid;
 }
 .channels-row > * { min-width: 0; }
 
-/* Donut chart via conic-gradient. Slice ranges set inline (style="..."). */
-.donut-wrap { display: flex; flex-direction: column; align-items: center; }
+/* Tables: avoid breaking a single row across pages */
+table.audit tr { break-inside: avoid; page-break-inside: avoid; }
+
+/* Donut chart via conic-gradient. Slice ranges set inline (style="...").
+   Keep the chart, its title, and its legend together on a single page —
+   splitting the donut from its legend is unreadable. */
+.donut-wrap {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  break-inside: avoid;
+  page-break-inside: avoid;
+}
 .donut-title { font-size: 9pt; font-weight: 700; color: var(--text-muted); margin-bottom: 2mm; }
 .donut {
   width: 30mm; height: 30mm;
@@ -325,14 +363,26 @@ ul.findings li { margin: 1.2mm 0; }
 ul.findings .finding-title { font-weight: 700; }
 ul.findings .action-label  { font-weight: 700; }
 
-/* --- 13. Footer stamp ---------------------------------------------- */
-.footer-stamp {
-  position: absolute;
-  bottom: 3mm;
-  right: 8mm;
+/* --- 13. Footer stamp ----------------------------------------------
+   The paged-media "running element" pattern: hoist the .page-footer
+   div out of the body flow, register it under the `footer` name, and
+   the @page @bottom-right rule above replays it on every printed page.
+
+   Browser preview (screen): the running() rule has no effect, so the
+   element renders inline at the bottom of the body — fine for ad-hoc
+   visual checks. The only authoritative rendering target is the PDF. */
+.page-footer {
+  position: running(footer);
+  text-align: right;
   font-size: var(--fs-footer);
   color: var(--footer-grey);
   font-style: normal;
+}
+@media screen {
+  /* Make the inline preview footer look the same as the print one */
+  .page-footer {
+    margin: 4mm 8mm 4mm 0;
+  }
 }
 
 /* --- 14. Tiny utility classes -------------------------------------- */

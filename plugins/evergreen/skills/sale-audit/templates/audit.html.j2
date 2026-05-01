@@ -207,7 +207,6 @@
     </div>
   </div>
 
-  <div class="footer-stamp">sale-audit v{{ data.skill_version }} · {{ labels.footer.amended }} {{ data.skill_updated }} · {{ labels.footer.generated }} {{ data.generated_at }}</div>
 </div>
 
 
@@ -264,6 +263,7 @@
 
   {% if data.section_2.fr_aggregation %}
   <h3 style="font-size:10pt;font-weight:700;margin:3mm 0 1mm 0;">{{ labels.section_2.fr_agg_title }}</h3>
+  <p class="note" style="margin:0 0 1mm 0;">{{ labels.section_2.fr_agg_caption }}</p>
   <table class="audit">
     <thead>
       <tr>
@@ -285,10 +285,21 @@
       </tr>
       {% endfor %}
     </tbody>
+    {% if data.section_2.fr_aggregation_total %}
+    {% set ft = data.section_2.fr_aggregation_total %}
+    <tfoot>
+      <tr class="total{% if ft.is_variance %} variance{% endif %}">
+        <td>{{ labels.total }}</td>
+        <td class="num">{{ money(ft.fr_amount) }}</td>
+        <td class="num">{{ money(ft.sum_slips) }}</td>
+        <td class="num">{% if ft.variance and ft.variance > 0 %}+{{ money(ft.variance) }}{% else %}{{ money(ft.variance) }}{% endif %}</td>
+        <td class="status">{{ ft.status }}</td>
+      </tr>
+    </tfoot>
+    {% endif %}
   </table>
   {% endif %}
 
-  <div class="footer-stamp">sale-audit v{{ data.skill_version }} · {{ labels.footer.amended }} {{ data.skill_updated }} · {{ labels.footer.generated }} {{ data.generated_at }}</div>
 </div>
 
 
@@ -319,6 +330,14 @@
           {% endfor %}
         </tbody>
       </table>
+      <div class="note">
+        <strong>{{ labels.section_3.computed_legend_title }}</strong>
+        <ul style="margin:0.5mm 0 0 4mm;padding:0;">
+          {% for item in labels.section_3.computed_legend %}
+          <li>{{ item|safe }}</li>
+          {% endfor %}
+        </ul>
+      </div>
       {% if data.section_3_cash.footer_note %}
       <div class="note">{{ data.section_3_cash.footer_note }}</div>
       {% endif %}
@@ -386,15 +405,19 @@
   <ul class="findings">
     {% for f in data.section_6_findings %}
     <li>
-      <span class="finding-title">{{ labels.section_6.finding_prefix }} {{ f.n }} — {{ f.title }}</span>
+      <span class="finding-title">{{ labels.section_6.finding_prefix }} {{ f.n | roman }} — {{ f.title }}</span>
       {{ f.body }}
       <span class="action-label">{{ labels.section_6.action_label }}</span> {{ f.action }}
     </li>
     {% endfor %}
   </ul>
 
-  <div class="footer-stamp">sale-audit v{{ data.skill_version }} · {{ labels.footer.amended }} {{ data.skill_updated }} · {{ labels.footer.generated }} {{ data.generated_at }}</div>
 </div>
+
+{# ─── Running footer ── repeated by @page rule on every printed page;
+       also rendered inline as a per-.page absolutely-positioned stamp
+       so the browser preview shows it too. ─── #}
+<div class="page-footer">sale-audit v{{ data.skill_version }} · {{ labels.footer.bank_ledger }}{{ data.bank_ledger_version }} · {{ labels.footer.generated }} {{ data.generated_at }}</div>
 
 </body>
 </html>

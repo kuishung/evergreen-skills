@@ -100,7 +100,14 @@
       { "line": "Instant Transfer (Non CFP)",      "fr_amount":   524.50, "sum_slips":   524.50, "variance":   0.00, "status": "Clean",    "is_variance": false },
       { "line": "Merchant Settlement",             "fr_amount":  1073.30, "sum_slips":  1073.30, "variance":   0.00, "status": "Clean",    "is_variance": false },
       { "line": "Cash in Today (excl Opening)",    "fr_amount": 11237.94, "sum_slips": 11586.61, "variance": 348.67, "status": "Variance", "is_variance": true  }
-    ]
+    ],
+    "fr_aggregation_total": {
+      "fr_amount": 36147.24,
+      "sum_slips": 36495.91,
+      "variance":    348.67,
+      "status": "Variance",
+      "is_variance": true
+    }
   },
 
   "section_3_cash": {

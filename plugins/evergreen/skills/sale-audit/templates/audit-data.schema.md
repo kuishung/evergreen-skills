@@ -10,8 +10,9 @@ The renderer (`../render/render-audit.py`) takes one JSON object and renders it 
 |---|---|---|
 | `schema_version` | int | Pin to `1` for now. Renderer reads but does not currently version-gate. |
 | `language` | `"en"` \| `"cn"` | Echoed into `<html lang="…">`; the `--lang` CLI flag overrides which label pack is loaded. |
-| `skill_version` | string | Filled at render time from `SKILL.md` frontmatter `version:` if absent. |
-| `skill_updated` | string | Filled at render time from `SKILL.md` frontmatter `updated:` if absent. |
+| `skill_version` | string | Filled at render time from `SKILL.md` frontmatter `version:` if absent. Footer reads this. |
+| `skill_updated` | string | Filled at render time from `SKILL.md` frontmatter `updated:` if absent. Reserved — not currently rendered (the footer dropped the `amended <date>` segment in v0.15.0). |
+| `bank_ledger_version` | string | Filled at render time from `../bank-ledger/SKILL.md` frontmatter `version:` if absent. Footer reads this so the report records which bank-ledger release produced today's clearance data. |
 | `generated_at` | string `YYYY-MM-DD HH:MM` | Filled by `datetime.now()` if absent. Footer reads this. |
 | `station` | object | `code` (`"TK"`/`"BS"`/`"BL"`), `name_long`, `name_long_cn`. |
 | `business_date` | string `YYYY-MM-DD` | Date being audited. |
@@ -34,8 +35,14 @@ The renderer (`../render/render-audit.py`) takes one JSON object and renders it 
 {
   "total": 60447.93,                       // RM
   "segments": [
-    { "name": "...", "amount": 0.0, "share_pct": 0.0 },
-    ...
+    // One row per business line. iBing and Rental are ALWAYS separate
+    // rows — never combine them into "iBing / Rental".
+    // TK: Fuel, Buraqmart, Rental, iBing (four rows).
+    // BS / BL: Fuel, Buraqmart, Rental (three rows; no iBing row at all).
+    { "name": "Fuel",      "amount": 0.0, "share_pct": 0.0 },
+    { "name": "Buraqmart", "amount": 0.0, "share_pct": 0.0 },
+    { "name": "Rental",    "amount": 0.0, "share_pct": 0.0 },
+    { "name": "iBing",     "amount": 0.0, "share_pct": 0.0 }   // TK only
   ],
   "footer_note": "Free text below the segment table (italic).",
   "channels": [
@@ -113,11 +120,20 @@ Order matters — slices render clockwise in array order. Sum of `pct` should eq
     { "line": "Cash in Today (excl Opening)",
       "fr_amount": 11237.94, "sum_slips": 11586.61,
       "variance": 348.67, "status": "Variance", "is_variance": true }
-  ]
+  ],
+  "fr_aggregation_total": {
+    "fr_amount": 33581.94,
+    "sum_slips": 33930.61,
+    "variance": 348.67,
+    "status": "Variance",
+    "is_variance": true
+  }
 }
 ```
 
 Set `fr_aggregation: []` if no aggregated FR lines exist; the section is omitted in that case.
+
+`fr_aggregation_total` is **required** whenever `fr_aggregation` has at least one row. It is the sum down each numeric column over every row in `fr_aggregation` — the renderer does not auto-compute it (rounding is the LLM's responsibility). `status` is the human verdict on the totals (`"Clean"` / `"Variance"` / etc.); `is_variance: true` paints the total row red. Omit (or set `null`) if `fr_aggregation` is empty.
 
 ## Cash highlight (Section 3)
 
@@ -178,7 +194,7 @@ The L-fields are rendered verbatim (string), so you can include qualifiers like 
 ]
 ```
 
-`n` is just the display number; the LLM owns the ordering (most material first per `SKILL.md` §7).
+`n` is the integer ordinal (1, 2, 3, …); the renderer formats it as an upper-case Roman numeral via the `roman` Jinja filter (FINDING I, II, III). Other rows in the report that need to point at a finding must cite the Roman number explicitly — e.g., `notes: "see FINDING IV"` — so back-office staff can cross-reference without hunting. The LLM owns the ordering (most material first per `SKILL.md` §7).
 
 ## Renderer responsibilities
 

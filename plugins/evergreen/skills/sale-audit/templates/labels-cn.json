@@ -37,6 +37,7 @@
   "section_2": {
     "title": "第 2 节 — 资金证据",
     "fr_agg_title": "FR 聚合核对",
+    "fr_agg_caption": "FR 金额 = 资金报告该项栏目实际打印的金额（通常为多张收据合并后的单一格）。收据合计 = 本次审计归入该项目下所有底层证据收据的真实加总。两数应当相等；合计行汇总此表所列每条聚合项，应与上方对应渠道金额相符（已逐张列示、未在此表合并的 FR 行不计入此合计）。",
     "col_doc": "单号",
     "col_type": "类型",
     "col_amt": "金额 (RM)",
@@ -68,7 +69,16 @@
     "col_item": "项目",
     "col_fr": "FR",
     "col_computed": "计算值",
-    "col_var": "差异"
+    "col_var": "差异",
+    "computed_legend_title": "各「计算值」如何得出",
+    "computed_legend": [
+      "<strong>开始现金</strong> = 前一业务日审计的结余现金，结转过来（今日不再重算，直接读取前一日 FR 收盘现金）。",
+      "<strong>现金营收 (POS)</strong> = GreenPOS 当日现金 (Cash) 收银总额（系统生成，按 §6 r.7 为标准依据）。",
+      "<strong>CFP 现金充值</strong> = CFP 报表当日充值条目中付款方式仅为「<em>现金</em>」者之合计。以银行转账或电子钱包付款的 CFP 充值不计入此项（属于 CFP 存款，非现金）。若当日 CFP 充值全部为银行转账，则此栏为 <em>0</em> 是正确的。",
+      "<strong>Buraqmart 现金</strong> = 站内 Buraqmart 的 Autocount POS 现金 (Cash) 收银总额。",
+      "<strong>Safeguards (CDM) 取款</strong> = 当日所有日期相符的 Safeguards CDM 现金存款单据合计（已由柜台取出并存入银行的现金）。",
+      "<strong>结束现金</strong> = 开始 + 现金营收 + CFP 现金充值 + Buraqmart 现金 − Safeguards 取款。与 FR 上印的结余现金对比；任何差异在「差异」栏显示。"
+    ]
   },
 
   "section_4": {
@@ -100,7 +110,7 @@
   },
 
   "footer": {
-    "amended": "修订",
+    "bank_ledger": "bank-ledger v",
     "generated": "生成"
   }
 }

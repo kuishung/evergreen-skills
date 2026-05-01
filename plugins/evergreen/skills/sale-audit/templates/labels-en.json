@@ -37,6 +37,7 @@
   "section_2": {
     "title": "Section 2 — Proof-of-fund",
     "fr_agg_title": "FR aggregation check",
+    "fr_agg_caption": "FR amount = the figure printed on that Fund Report line (often a single cell summing several slips). Sum of slips = the actual total of the underlying proof-of-fund slips this audit attributes to the same FR line. The two should match; the Total row sums every aggregated FR line shown here and should reconcile with the corresponding channel section above (it does not include FR lines that are already 1-slip-per-row, since those have no aggregation to verify).",
     "col_doc": "Doc",
     "col_type": "Type",
     "col_amt": "Amt (RM)",
@@ -68,7 +69,16 @@
     "col_item": "Item",
     "col_fr": "FR",
     "col_computed": "Computed",
-    "col_var": "Var"
+    "col_var": "Var",
+    "computed_legend_title": "How each Computed value is derived",
+    "computed_legend": [
+      "<strong>Opening cash</strong> = closing cash carried forward from the previous business date's audit (no recompute today; pulled from the prior FR's closing cash).",
+      "<strong>Cash revenue (POS)</strong> = GreenPOS Cash-tender total for the day (system-generated, source of truth per §6 r.7).",
+      "<strong>CFP cash top-up</strong> = sum of CFP-report top-up entries whose payment mode is <em>cash</em> only. CFP top-ups paid via bank transfer / e-wallet are excluded (they are CFP Deposit, not cash). If today's only CFP top-ups were bank transfer, this is correctly <em>0</em>.",
+      "<strong>BuraqMart cash</strong> = Autocount POS Cash-tender total for the Buraqmart side of the station.",
+      "<strong>Safeguards (CDM) pick-up</strong> = sum of all Safeguards CDM cash-deposit slips dated for the audit day (cash physically removed from the till and deposited).",
+      "<strong>Closing cash</strong> = Opening + Cash revenue + CFP cash top-up + BuraqMart cash − Safeguards pick-up. Compared to the FR's printed closing cash; any difference appears in the Var column."
+    ]
   },
 
   "section_4": {
@@ -100,7 +110,7 @@
   },
 
   "footer": {
-    "amended": "amended",
+    "bank_ledger": "bank-ledger v",
     "generated": "generated"
   }
 }
