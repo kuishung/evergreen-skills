@@ -36,7 +36,12 @@ $Config = @{
 
     # whatsapp-send credentials file (local-only, NOT in the repo). Leave empty
     # to disable WhatsApp notifications — the audit still runs and writes PDFs.
-    TwilioCredsPath   = "$env:USERPROFILE\.evergreen\twilio\credentials.json"
+    TwilioCredsPath     = "$env:USERPROFILE\.evergreen\twilio\credentials.json"
+
+    # whatsapp-send recipients JSON file (Drive-synced single source of truth
+    # across machines). On Win 11, typically G:\My Drive\... ; on dev, may be
+    # at a different drive letter. Leave empty to disable WhatsApp.
+    RecipientsPath      = 'G:\My Drive\EVGData\config\recipients.json'
 
     # Optional: Google Drive share URL for the audit-output folder. When set,
     # the WhatsApp message includes this so recipients click through. Leave
@@ -83,10 +88,13 @@ foreach ($key in 'DailyReportRoot', 'AuditOutputRoot') {
 # Build the prompt. `-p` is Claude Code's non-interactive mode; the
 # skill matches via its `description` field in SKILL.md.
 $stationsCsv = $Config.Stations -join ', '
-# whatsapp-send config block — only injected when TwilioCredsPath is non-empty.
-# Empty path means WhatsApp notifications are disabled for this run.
+# whatsapp-send config block — only injected when TwilioCredsPath AND
+# RecipientsPath are both non-empty. If either is empty, WhatsApp
+# notifications are disabled for this run (audit still writes PDFs).
 $whatsappBlock = ''
-if ($Config.TwilioCredsPath -and $Config.TwilioCredsPath.Trim().Length -gt 0) {
+$twilioReady = $Config.TwilioCredsPath -and $Config.TwilioCredsPath.Trim().Length -gt 0
+$recipientsReady = $Config.RecipientsPath -and $Config.RecipientsPath.Trim().Length -gt 0
+if ($twilioReady -and $recipientsReady) {
     $driveLine = if ($Config.AuditDriveFolderUrl -and $Config.AuditDriveFolderUrl.Trim().Length -gt 0) {
         "- Audit Drive folder URL: $($Config.AuditDriveFolderUrl)"
     } else {
@@ -94,6 +102,7 @@ if ($Config.TwilioCredsPath -and $Config.TwilioCredsPath.Trim().Length -gt 0) {
     }
     $whatsappBlock = @"
 - Twilio credentials path: $($Config.TwilioCredsPath)
+- WhatsApp recipients path: $($Config.RecipientsPath)
 $driveLine
 "@
 }
