@@ -1,0 +1,41 @@
+{
+  "_comment": "Source of truth for whatsapp-send recipients. Place the real file somewhere synced across all machines that send notifications (typically Google Drive for Desktop, e.g. G:\\My Drive\\EVGData\\config\\recipients.json). Each machine's whatsapp-send skill reads from the path saved as the 'WhatsApp recipients' reference memory and as RecipientsPath in run-sale-audit.ps1. Edit on any machine; Drive auto-syncs to others within seconds.",
+  "_schema": {
+    "name": "Free text. Used in logs, never in the message body.",
+    "whatsapp": "E.164 format with leading '+', no spaces or dashes. Sandbox testing requires the recipient to have sent 'join <two-words>' to the Twilio sandbox number first.",
+    "stations": "Array of station codes the recipient should receive: any of 'TK', 'BS', 'BL'. Use ['*'] to match all stations.",
+    "languages": "Array of audit languages: 'EN' and/or 'CH'. The skill sends one WhatsApp per station regardless of language; this filters whether the recipient gets the message at all. Use ['*'] for all.",
+    "reports": "Array of report types: 'sale-audit' today. Use ['*'] for all.",
+    "active": "true (default) or false. Set false to mute without removing the row.",
+    "notes": "Optional free text, ignored by the skill."
+  },
+  "recipients": [
+    {
+      "name": "Owner KK",
+      "whatsapp": "+60168881234",
+      "stations": ["*"],
+      "languages": ["*"],
+      "reports": ["*"],
+      "active": true,
+      "notes": "Owner — all audits, both languages"
+    },
+    {
+      "name": "TK Manager",
+      "whatsapp": "+60198887654",
+      "stations": ["TK"],
+      "languages": ["EN"],
+      "reports": ["sale-audit"],
+      "active": true,
+      "notes": "TK only, English"
+    },
+    {
+      "name": "Former staff (muted)",
+      "whatsapp": "+60100000000",
+      "stations": ["*"],
+      "languages": ["*"],
+      "reports": ["*"],
+      "active": false,
+      "notes": "Left 2026-04. Keep row for audit trail; active=false suppresses sends."
+    }
+  ]
+}
