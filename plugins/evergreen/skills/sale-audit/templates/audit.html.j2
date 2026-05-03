@@ -54,8 +54,12 @@
 </head>
 <body>
 
-{# ════════════════════════════════ PAGE 1 ════════════════════════════════ #}
-<div class="page page-break">
+{# Single flowing document — pagination is handled by CSS @page rules.
+   No forced page-break-after between sections, so we don't leave blank
+   half-pages when a section ends short of A4. The .section-band class
+   carries break-after: avoid-page to keep section headers with their
+   first block of content (no orphaned headers). #}
+<div class="page">
 
   <h1 class="title-band">{{ data.station.name_long }} ({{ data.station.code }}) {{ labels.title_suffix }} {{ data.business_date }}</h1>
 
@@ -170,17 +174,12 @@
 
   </div>
 
-</div>
-
-
-{# ════════════════════════════════ PAGE 2 ════════════════════════════════ #}
-{# §9.2 — Revenue Channel table.
-   CFP Top-up block first (non-revenue, only if present), then revenue
-   grouped by bank account with per-bank subtotals. The slip-level
-   detail (Doc/Type/Amt/Date/Uniq/Acct/POS/InFR) lives directly under
-   each bank's channel groups. The Cleared column is dropped — bank
-   clearance moves to a separate skill. #}
-<div class="page page-break">
+  {# §9.2 — Revenue Channel table.
+     CFP Top-up block first (non-revenue, only if present), then revenue
+     grouped by bank account with per-bank subtotals. The slip-level
+     detail (Doc/Type/Amt/Date/Uniq/Acct/POS/InFR) lives directly under
+     each bank's channel groups. The Cleared column is dropped — bank
+     clearance moves to a separate skill. #}
 
   <h2 class="section-band">{{ labels.section_2.title }}</h2>
 
@@ -327,15 +326,8 @@
   <div class="note">{{ data.section_2.safeguards_rule_note|safe }}</div>
   {% endif %}
 
-</div>
-
-
-{# ════════════════════════════════ PAGE 3 ════════════════════════════════ #}
-{# §3 redesigned per §9.5: single arithmetic flow, no FR/Computed split.
-   §2-aggregation becomes the §6.12 reconciliation between the FR's
-   aggregated lines and the underlying slips (kept here as Section 3a).
-   #}
-<div class="page page-break">
+  {# §3 redesigned per §9.5: single arithmetic flow, no FR/Computed split.
+     Old §2 fr_aggregation moves here as §3a (sibling sub-block). #}
 
   <h2 class="section-band">{{ labels.section_3.title }}</h2>
 
@@ -442,12 +434,6 @@
     </div>
 
   </div>
-
-</div>
-
-
-{# ════════════════════════════════ PAGE 4 ════════════════════════════════ #}
-<div class="page">
 
   <div class="split-50">
 

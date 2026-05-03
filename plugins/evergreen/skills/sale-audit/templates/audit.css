@@ -64,7 +64,6 @@
 
 @media print {
   .no-print { display: none; }
-  .page-break { page-break-after: always; }
 }
 
 html, body {
@@ -80,16 +79,28 @@ html, body {
   print-color-adjust: exact;
 }
 
-/* For browser preview, render the page at A4-landscape proportions */
+/* Single content wrapper (browser-preview sheet metaphor). For PDF
+   the @page rule above defines the actual paper; the printed output
+   flows continuously through whatever pages it needs and breaks
+   between sections happen automatically based on content height
+   plus the break-* hints below — there are no forced page-breaks
+   in the document, so we never leave half-empty pages. */
 .page {
-  width: 297mm;
-  min-height: 210mm;
+  max-width: 297mm;
   padding: 6mm 8mm 17mm 8mm;   /* match @page bottom reserve */
-  margin: 0 auto 6mm auto;
+  margin: 0 auto;
   background: var(--bg-cream);
   position: relative;
   box-sizing: border-box;
-  box-shadow: 0 2px 12px rgba(0,0,0,0.10);   /* preview only; ignored on @print */
+}
+@media screen {
+  /* On a wide browser, give the content a sheet-of-paper look so
+     reviewers eyeballing the HTML in a browser see it the way it
+     prints. The PDF/print output ignores this. */
+  .page {
+    margin: 0 auto 6mm auto;
+    box-shadow: 0 2px 12px rgba(0,0,0,0.10);
+  }
 }
 
 /* --- 3. Title band -------------------------------------------------- */
