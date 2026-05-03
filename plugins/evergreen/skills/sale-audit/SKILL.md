@@ -282,7 +282,32 @@ Each variance row gets its own finding (so cross-references elsewhere can name a
 
 `FINDING I, II, III, …` → `FINDING 1, 2, 3, …`. Drop the `| roman` Jinja filter at template render time; keep `f.n` as the integer in JSON. Cross-references elsewhere in the report read `see FINDING 4` (no Roman). The renderer's `to_roman()` helper stays in `render-audit.py` as a no-op safety net but is no longer wired to the template.
 
-### 9.5 Out of scope for the implementation pass
+### 9.5 Section 3 — Cash highlight: drop FR/Computed split, single arithmetic flow
+
+The current 4-column layout (`Item` / `FR` / `Computed` / `Var`) is hard to read because every row carries two figures and a per-row variance, which obscures the actual cash flow. Replace it with a **single linear arithmetic flow** — one column of figures — followed by a single comparison line at the foot:
+
+```
+Opening cash                                            RM …
++ Cash collected from all segments today                RM …
+− Cash already banked in (proven with deposit slips)    RM …
+= Expected cash balance at site                         RM …
+
+FR printed closing cash: RM …  ·  Variance vs expected: RM …  (Pass | Variance)
+```
+
+Rules:
+
+- The four arithmetic lines are the only rows in the table. No FR column, no Computed column, no per-row variance.
+- "Cash collected from all segments today" sums the cash-tender legs across every segment that handled cash (GreenPOS Cash, Buraqmart Autocount Cash, plus CFP cash-mode top-ups — the components currently rendered as separate rows 2–4 of the v0.15.x §3). Show those components either inline as a one-line breakdown (`= GreenPOS Cash 8,432.10 + Buraqmart 2,154.50 + CFP cash top-up 0.00`) or via a tooltip-style footnote — TBD at implementation time.
+- "Cash already banked in" = sum of all Safeguards / CDM cash-deposit slip images dated for the audit day (today's row 5).
+- "Expected cash balance at site" = Opening + collected − banked-in (today's row 6, but framed as expected on-hand, not as Closing).
+- The single comparison line beneath the table is the FR closing-cash check. If `Variance vs expected != 0`, auto-emit a §6 finding using the same direction-aware Case A / Case B pattern as §9.3:
+    - **Case A — FR > Expected** (FR claims more on-hand than the flow predicts): site may be holding cash from an un-uploaded inflow, or a deposit slip the audit missed exists. Cross-check the proof-of-fund slip set.
+    - **Case B — FR < Expected** (FR claims less than expected): either an inflow went unrecorded today (e.g., a cash-mode CFP top-up missed), or staff has under-declared closing cash. Request reconciliation.
+
+The "How each Computed value is derived" legend (`labels.section_3.computed_legend`) goes away — its content is folded into the four-line table itself, with any per-component breakdown handled via the inline / footnote treatment above.
+
+### 9.6 Out of scope for the implementation pass
 
 - The bank-clearance skill itself — that's a separate skill folder, separate `SKILL.md`, separate version line. Spec it after this `sale-audit` amendment lands.
-- Any changes to §3 (cash highlight), §4 (fuel quantity), §4b (POS tally), §5 (§4 checklist) — those sections stay as v0.15.x.
+- Any changes to §4 (fuel quantity), §4b (POS tally), §5 (§4 checklist) — those sections stay as v0.15.x.
