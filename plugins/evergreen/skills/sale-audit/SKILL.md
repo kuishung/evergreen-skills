@@ -307,7 +307,22 @@ Rules:
 
 The "How each Computed value is derived" legend (`labels.section_3.computed_legend`) goes away — its content is folded into the four-line table itself, with any per-component breakdown handled via the inline / footnote treatment above.
 
-### 9.6 Out of scope for the implementation pass
+### 9.6 Inline finding cross-reference on every red flag
+
+Today the report colours problem rows red (§4b POS tally `passed: false`, §2 FR-aggregation variance, etc.) and lists explanatory findings separately in §6. The reader has to scan §6 to figure out which finding explains which red cell. Fix this by **stamping the finding number inline next to every red flag**, so the eye jumps straight from the red colour to the right §6 bullet.
+
+Rule: wherever the report renders a cell or row in the variance / failed style (today's `.variance` / `passed:false` styling), it must also carry the matching finding number — typically appended to the existing result text (e.g., `✗ −17.40 — see FINDING 6`) or as a small in-row reference badge after the variance figure. The finding it references must exist in §6 with the same number.
+
+Applies to every section that emits a §6 finding on variance:
+
+- **§4b POS tally** — every `passed: false` row gains `see FINDING <n>` after the existing `✗ <variance>` result text. The audit author must therefore raise (and number) a finding for every red §4b row before rendering — there is no longer such thing as a red §4b row without a matching §6 entry.
+- **§2 Revenue Channel table** — the foot reconciliation row (`Total inflow vs Sum of slips`, per §9.2) when in variance: append `see FINDING <n>` to the variance figure.
+- **§2 FR aggregation table** — every variance row (per §9.3): append `see FINDING <n>` next to the variance figure / status badge.
+- **§3 Cash highlight** — the foot comparison line (`FR printed closing cash vs Variance vs expected`, per §9.5) when in variance: append `see FINDING <n>` to the variance figure.
+
+Implementation note: the JSON contract for these rows gains an optional `finding_n: <int>` field (matches `f.n` in `section_6_findings`). The template renders `see FINDING {{ row.finding_n }}` whenever the row is styled red **and** `finding_n` is set; if a row is red but `finding_n` is missing, the renderer treats it as a data error and emits a visible `[finding number missing]` placeholder so the gap is obvious during review (failing loud beats failing silent).
+
+### 9.7 Out of scope for the implementation pass
 
 - The bank-clearance skill itself — that's a separate skill folder, separate `SKILL.md`, separate version line. Spec it after this `sale-audit` amendment lands.
-- Any changes to §4 (fuel quantity), §4b (POS tally), §5 (§4 checklist) — those sections stay as v0.15.x.
+- Any changes to §4 (fuel quantity), §5 (§4 checklist) — those sections stay as v0.15.x.
