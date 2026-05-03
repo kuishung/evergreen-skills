@@ -1,8 +1,8 @@
 ---
 name: sale-audit
 description: Use this skill whenever the user (Evergreen back-office / management) wants to audit, verify, or check the daily sale submission of a petrol station — TK (Tg. Kapor), BS (Berkat Setia), or BL (Bubul Lama). Triggers include phrases like "audit TK", "audit sale", "check BS sale", "verify fund report", "run daily audit", "daily sale audit for <date>", or any request to reconcile a station's Fund Report against its supporting documents and produce an audit PDF.
-version: 0.23.0
-updated: 2026-05-04 00:30
+version: 0.24.0
+updated: 2026-05-04 00:45
 ---
 
 # Sale Audit — Evergreen Petrol Stations
@@ -182,17 +182,25 @@ The renderer fills the template; the LLM's job is to produce the data values. Fo
 3. List files present vs. missing for that station+date.
 4. Run all §6 checks, preserving every intermediate calculation.
 5. Build the audit-data JSON object per §7's data contract (`templates/audit-data.schema.md`). Every required field must be populated; partial data is a bug, not a degraded output. Write the JSON to a scratch path. **For each language (en, cn):** run `render-audit.py --data <json> --lang <lang> --out <scratch>_<LANG>.html` to produce deterministic Jinja2-substituted HTML, then invoke `anthropic-skills:pdf` on that HTML (A4 landscape) to write `<audit-output-root>/<YYYY>/<YYYY-MM>/<YYYY-MM-DD>/<Station>-<YYYY_MM_DD>-Audit_<YYYYMMDD>_<hh>_<mm>_<Lang>.pdf`. Create the date tree if missing. Delete the scratch JSON and the scratch HTML files when both PDFs are written. Produce no other files. **If `render-audit.py` errors at any point, fail the run** — never substitute an LLM-rendered or ReportLab-rendered PDF; the visual must be byte-stable across runs.
-6. **Notify via WhatsApp (best-effort, non-blocking).** Once both PDFs are written for a station, invoke the `whatsapp-send` skill — **once per station**, not once per language. Skip this step entirely when either the `Twilio credentials path` or `WhatsApp recipients path` reference memory is missing or unset; those signal that WhatsApp notifications are intentionally disabled (e.g., on a dev machine). When both are present, build the message body as a **single line** in this exact shape (no emoji, no findings list, no Drive URL):
+6. **Notify via WhatsApp (best-effort, non-blocking).** Once both PDFs are written for a station, invoke the `whatsapp-send` skill — **once per station**, not once per language. Skip this step entirely when either the `Twilio credentials path` or `WhatsApp recipients path` reference memory is missing or unset; those signal that WhatsApp notifications are intentionally disabled (e.g., on a dev machine). When both are present, build the message body in this exact shape (header line + one full path per language; no emoji, no findings list, no Drive URL):
 
     ```
-    <STATION> Sale Audit for <YYYY-MM-DD> ready: <pdf-folder-path>
+    <STATION> Sale Audit for <YYYY-MM-DD> ready:
+    EN: <full-path-to-EN-pdf>
+    CH: <full-path-to-CH-pdf>
     ```
 
-    Where `<pdf-folder-path>` is the **filesystem path to the audit-output date folder** (the local `<audit-output-root>/<YYYY>/<YYYY-MM>/<YYYY-MM-DD>/`, NOT a `https://drive.google.com/…` share URL). Recipients with Drive for Desktop see the same path automatically — those without Drive sync get told where the file lives so management can fetch it via RDP / NAS. Concrete example:
+    Where each `<full-path-to-…-pdf>` is the **complete filesystem path including filename and `.pdf` extension** that this run just wrote — i.e., `<audit-output-root>/<YYYY>/<YYYY-MM>/<YYYY-MM-DD>/<Station>-<YYYY_MM_DD>-Audit_<YYYYMMDD>_<hh>_<mm>_<Lang>.pdf`. The path uses **local filesystem syntax** (e.g. `C:\Users\KS\DATA\…`), NOT a `https://drive.google.com/…` share URL. Recipients with Drive for Desktop see the same path automatically; those without Drive sync get told where each file lives so management can fetch it via RDP / NAS.
+
+    Concrete example for TK on 2026-05-04 with audit generated at 06:30:
 
     ```
-    TK Sale Audit for 2026-05-04 ready: C:\Users\KS\DATA\EVG-AUDIT\2026\2026-05\2026-05-04
+    TK Sale Audit for 2026-05-04 ready:
+    EN: C:\Users\KS\DATA\EVG-AUDIT\2026\2026-05\2026-05-04\TK-2026_05_04-Audit_20260504_06_30_EN.pdf
+    CH: C:\Users\KS\DATA\EVG-AUDIT\2026\2026-05\2026-05-04\TK-2026_05_04-Audit_20260504_06_30_CH.pdf
     ```
+
+    The audit-running LLM **knows the exact filenames** because it just wrote them — substitute the real `<YYYYMMDD>_<hh>_<mm>` from the rendered file's actual name, not a placeholder. The body is composed at run time, fed to `--body` as a single multi-line string (newlines preserved by Twilio).
 
     Then invoke `whatsapp-send`'s bundled `send.py` in **bulk-mode** with one CLI call per station:
 
@@ -201,12 +209,12 @@ The renderer fills the template; the LLM's job is to produce the data values. Fo
         --credentials <Twilio credentials path> \
         --recipients <WhatsApp recipients path> \
         --station <STATION> --language "EN,CH" --report sale-audit \
-        --body "<STATION> Sale Audit for <YYYY-MM-DD> ready: <pdf-folder-path>"
+        --body "<the body you built — header line + EN line + CH line>"
     ```
 
     The script reads the recipients JSON, filters by station/language/report/active, dedupes by phone, and sends one WhatsApp per match. Capture stdout (one JSON line per recipient) and stderr (per-recipient errors) into the audit log. **If the send fails for any reason** (creds missing, recipients file missing, Twilio error, network), log the failure and continue — the audit itself is **still successful** because the PDFs are on disk. Never raise a WhatsApp failure as a §6 audit finding (it's an operational issue, not an audit issue).
 
-    **Why one short line and not a findings summary:** earlier versions of this step composed a multi-line message with a top-3 findings list and a Drive folder URL. v0.23.0 collapsed it back to a single-line "ready" notification per the operator's preference — recipients open the actual PDF when they need detail, and the WhatsApp message just signals that today's audit has run and where to look.
+    **Why this format:** earlier versions composed a multi-line message with a top-3 findings list and a Drive folder URL. v0.23.0 collapsed it to a single-line "ready" with a folder path. v0.24.0 expanded the body again to include both **complete filenames** (EN + CH) so recipients can navigate straight to the file rather than landing in a folder and hunting. Recipients still open the actual PDF for detail; the message just signals readiness and the precise file location.
 7. Reply in chat with the 3–5 most material findings, the absolute paths to both saved PDFs, and a one-line WhatsApp send result aggregating across all stations (e.g., `WhatsApp: TK 2/2, BS 2/2, BL 2/2` or `WhatsApp: send failed — see log`).
 
 ## 9. 2026-05-03 redesign — IMPLEMENTED in v0.17.0

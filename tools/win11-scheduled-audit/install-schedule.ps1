@@ -245,15 +245,21 @@ WHATSAPP NOTIFICATIONS (whatsapp-send skill, chained per sale-audit ``§8`` step
 - WhatsApp recipients path: $($Cfg.RecipientsPath)
 $driveLine
 
-After both PDFs are written for each station (and the MIRROR step above is done if applicable), invoke whatsapp-send (per sale-audit ``§8`` step 6) — best-effort, never blocks the audit. The message body is a SINGLE LINE in this exact shape, one per station:
+After both PDFs are written for each station (and the MIRROR step above is done if applicable), invoke whatsapp-send (per sale-audit ``§8`` step 6) — best-effort, never blocks the audit. The message body has THREE LINES (header + EN path + CH path), one per station:
 
-    <STATION> Sale Audit for <YYYY-MM-DD> ready: <pdf-folder-path>
+    <STATION> Sale Audit for <YYYY-MM-DD> ready:
+    EN: <full-path-to-EN-pdf>
+    CH: <full-path-to-CH-pdf>
 
-…where <pdf-folder-path> is the LOCAL audit-output date folder (the ``$($Cfg.AuditOutputRoot)\<YYYY>\<YYYY-MM>\<YYYY-MM-DD>`` path, NOT a https://drive.google.com URL). Concrete example for today's run:
+Each EN/CH path is the COMPLETE filesystem path INCLUDING the .pdf filename you just wrote — it lives under ``$($Cfg.AuditOutputRoot)\<YYYY>\<YYYY-MM>\<YYYY-MM-DD>\<Station>-<YYYY_MM_DD>-Audit_<YYYYMMDD>_<hh>_<mm>_<Lang>.pdf``. The <YYYYMMDD>_<hh>_<mm> portion is the audit's actual generation timestamp, which YOU know because you chose it when rendering. Substitute the real timestamp (not a placeholder).
 
-    TK Sale Audit for $auditDate ready: $($Cfg.AuditOutputRoot)\$($auditDate.Substring(0,4))\$($auditDate.Substring(0,7))\$auditDate
+Concrete example for TK on $auditDate generated at, say, 06:30:
 
-No emoji, no findings list, no Drive URL. Recipients open the actual PDF when they need detail; the message just signals that today's audit has run.
+    TK Sale Audit for $auditDate ready:
+    EN: $($Cfg.AuditOutputRoot)\$($auditDate.Substring(0,4))\$($auditDate.Substring(0,7))\$auditDate\TK-$($auditDate.Replace('-','_'))-Audit_$($auditDate.Replace('-',''))_06_30_EN.pdf
+    CH: $($Cfg.AuditOutputRoot)\$($auditDate.Substring(0,4))\$($auditDate.Substring(0,7))\$auditDate\TK-$($auditDate.Replace('-','_'))-Audit_$($auditDate.Replace('-',''))_06_30_CH.pdf
+
+LOCAL filesystem path only — NOT a https://drive.google.com URL. No emoji, no findings list, no folder-only path. Pass the whole 3-line body to send.py via --body (newlines preserved). Send one message per station via --station.
 
 If the send fails for any reason, log the failure and continue; do NOT raise it as a §6 audit finding (operational issue, not an audit issue).
 "@
