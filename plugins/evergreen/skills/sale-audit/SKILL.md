@@ -215,3 +215,74 @@ The renderer fills the template; the LLM's job is to produce the data values. Fo
     ```
     The script reads the recipients JSON, filters by station/language/report/active, dedupes by phone, and sends one WhatsApp per match. Capture stdout (one JSON line per recipient) and stderr (per-recipient errors) into the audit log. **If the send fails for any reason** (creds missing, recipients file missing, Twilio error, network), log the failure and continue — the audit itself is **still successful** because the PDFs are on disk. Never raise a WhatsApp failure as a §6 audit finding (it's an operational issue, not an audit issue).
 7. Reply in chat with the 3–5 most material findings, the absolute paths to both saved PDFs, and a one-line WhatsApp send result aggregating across all stations (e.g., `WhatsApp: TK 2/2, BS 2/2, BL 2/2` or `WhatsApp: send failed — see log`).
+
+## 9. Pending amendments — 2026-05-03 (NOT yet implemented)
+
+The user is reshaping the §7.2 PDF layout. The bullets below are the **target spec** captured during the 2026-05-03 review session; the renderer / template / schema / sample-data have **not** yet been updated to match. Until they are, the running audit still produces the v0.15.x layout. Implementation will land as a single coordinated pass once the user finishes commenting.
+
+### 9.1 Section 1 — Revenue table
+
+Replace the current `revenue.segments` rows with this structure. Every figure currently sitting in explanatory paragraphs / footnotes around the table must be folded **into** the table itself — no out-of-band callouts:
+
+- **Fuel — Petrol**: litres, then RM. The RM column splits into two sub-figures: **BUDI95** (the subsidised / IPTB-claimable portion) and **Collected** (what the customer actually paid at the pump).
+- **Fuel — Diesel**: litres, then RM (no BUDI95 split — diesel isn't on the subsidy programme today).
+- **Buraqmart**.
+- **iBing** — TK only; do not emit a zero-amount row for BS or BL.
+- **Lot Rental**.
+
+### 9.2 Section 1 — Revenue Channel table (restructured)
+
+Today's flat per-channel table becomes a **bank-grouped** table with explicit per-bank totals. Order:
+
+1. **CFP Top-up** first (non-revenue) — render this block only when the day actually has CFP top-up inflow; suppress the entire CFP Top-up block if the day has none.
+2. **Revenue** block, grouped **by bank account**. Each of the six approved Maybank/AmBank accounts (§2) that received money today gets its own sub-table; under each, list the channels that fed money into that account, with a per-bank subtotal at the foot.
+
+**Channel taxonomy** (rows that may appear under each bank):
+
+- We Direct Bank-in
+- Instant Transfer (Non CFP)
+- Instant Transfer (Lot Rental)
+- Merchant Settlement
+- Cheque
+- BUDI95
+- Safeguards — see classification rule below.
+
+**Safeguards classification rule.** Read the Safeguards (G4S) receipt image before deciding the channel:
+
+- If our company bank account number is **printed on the Safeguards receipt**, the cash credits straight to that account → reclassify the row as **We Direct Bank-in** under the matching bank.
+- If our account number is **not** on the receipt, the cash goes through G4S central clearing first → keep the row as **Safeguards**.
+
+Never classify a Safeguards slip from filename text or FR section — only from what's printed on the receipt itself.
+
+**Per-row audit columns** (under each bank's channel list):
+
+- `Doc` — document / receipt reference.
+- `Type` — slip type (CDM, IFT, TT, Cheque, G4S voucher, …) read from the slip image per §6 rule 6b.
+- `Amt` — amount in RM.
+- `Date` — date-match tick (§6 rule 4).
+- `Uniq` — uniqueness tick (§6 rule 5).
+- `Acct` — destination account read off the slip (§6 rule 6).
+- `POS` — POS tally tick (§6 rules 7–8).
+- `In FR` — FR-aggregation tick (§6 rule 12).
+
+**Drop the `Cleared✓` column entirely.** Bank-clearance verification (today's §6 rule 11 — Web App ping, CSV fallback, per-slip clearance lookup) moves out of `sale-audit` into a **separate skill** (working name: bank-clearance-audit). Until that skill ships, the sale-audit PDF reports inflow categorisation only — clearance is verified out-of-band.
+
+**Total-inflow reconciliation row.** At the foot of the Revenue Channel table, emit a single reconciliation line: `Total inflow (table) vs Sum of proof-of-fund slips uploaded` → pass / variance. Any variance is a §6 finding (the table missed a slip, or a slip is uploaded but not yet categorised into a channel).
+
+### 9.3 Section 2 — FR aggregation: auto-generated direction-aware finding on variance
+
+For every FR-aggregation row whose `variance != 0`, the audit must emit a §6 finding with the direction interpretation already done — the back-office reader should not have to reason about which direction means what:
+
+- **Case A — `FR amount > Sum of slips`** (FR claims more than slips prove). Finding text template: *"FR `<line>` declared RM `<fr>` but only RM `<slips>` in proof-of-fund slips uploaded; RM `<|variance|>` unaccounted for — either (a) cash/value still held at site, or (b) deposit made but slip missing. Cross-check §3 closing cash: if §3 also overshoots by ~RM `<|variance|>`, value is still at site; otherwise request the missing slip."*
+- **Case B — `FR amount < Sum of slips`** (slips prove more than FR claims). Finding text template: *"Proof-of-fund slips total RM `<slips>` but FR `<line>` only declared RM `<fr>`. Funds reached the bank; FR understated by RM `<|variance|>`. Action: amend the FR `<line>` row to match the slip total."*
+
+Each variance row gets its own finding (so cross-references elsewhere can name a single Roman/Arabic number — see §9.4).
+
+### 9.4 Section 6 — Findings numbering: switch from Roman to Arabic numerals
+
+`FINDING I, II, III, …` → `FINDING 1, 2, 3, …`. Drop the `| roman` Jinja filter at template render time; keep `f.n` as the integer in JSON. Cross-references elsewhere in the report read `see FINDING 4` (no Roman). The renderer's `to_roman()` helper stays in `render-audit.py` as a no-op safety net but is no longer wired to the template.
+
+### 9.5 Out of scope for the implementation pass
+
+- The bank-clearance skill itself — that's a separate skill folder, separate `SKILL.md`, separate version line. Spec it after this `sale-audit` amendment lands.
+- Any changes to §3 (cash highlight), §4 (fuel quantity), §4b (POS tally), §5 (§4 checklist) — those sections stay as v0.15.x.
