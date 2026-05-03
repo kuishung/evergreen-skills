@@ -124,33 +124,41 @@ The bank-grouped table no longer carries a foot reconciliation row — that role
 
 ## Section 2b — Inflow reconciliation summary
 
+Per-account list of where today's revenue + non-revenue ended up, framed so the sum reconciles **exactly** with `data.inflow.total` by construction (each row is independently derived from POS / slips / reports).
+
+Recommended ordering of rows:
+
+1. **One row per approved bank account** (§2 list — six accounts: 3 AmBank + 3 Maybank). Each row reports **non-cash revenue only** (Card + IFT + Cheque) routed to that account today, with slip evidence cited inline. Accounts that received nothing show `0.00` so the audit visibly confirms no rogue routing to non-approved accounts.
+2. **Cash — collected today**. Single line; POS-derived (GreenPOS Cash tender + Buraqmart cash + cash CFP top-up). The amount is today's cash revenue, regardless of whether Safeguards has banked it yet — that timing question lives in §3. The Safeguards slip evidence in §2 proves cash physically banked but doesn't appear here.
+3. **CFP Voucher — redemption**. Pre-paid balance consumed against fuel; no bank movement. Evidenced by CFP report redemption lines.
+4. **BUDI95 — IPTB-claimable receivable**. Gov subsidy not banked today. Evidenced by PUKAL BUDI95 receipts.
+5. **CFP Top-up (non-revenue)**. Direct credit to whichever Maybank account the customer wired to. Evidenced by TTCFP slip(s) — already in §2 CFP Top-up block.
+
 ```jsonc
 {
-  "subtitle": "Headline reconciliation — every component of §1 Total Inflow accounted for. ...",
+  "subtitle": "Headline reconciliation — every component of §1 Total Inflow accounted for, listed per approved bank account...",
   "total_inflow": 49654.60,                   // matches data.inflow.total
   "rows": [
-    { "label": "AmBank — revenue via AMB accounts (sum of AMB 8135 + AMB 8146 from §2)",
-      "amount": 23941.80,
-      "evidence": "9 IFT slips + 3 Merchant slips + 8 Safeguards slips — see §2." },
-    { "label": "Maybank — revenue via MBB accounts",
-      "amount":     0.00,
-      "evidence": "No revenue routed via Maybank today." },
-    { "label": "CFP Top-up (non-revenue) — via MBB 5366",
-      "amount":   967.50,
-      "evidence": "1 TTCFP slip — see §2 CFP Top-up block." },
+    { "label": "AMB 8881058618135 — non-cash revenue (Card + IFT + Cheque)",
+      "amount":    0.00,
+      "evidence": "No non-cash revenue routed here today." },
+    { "label": "AMB 8881058618146 — non-cash revenue (Card + IFT + Cheque)",
+      "amount": 1597.80,
+      "evidence": "13 IFT slips RM 524.50 + 3 Merchant slips RM 1,073.30 — see §2 detail." },
+    // ... one row per approved account
+    { "label": "Cash — collected today (POS Cash tender + Buraqmart cash + cash CFP top-up)",
+      "amount": 22363.01,
+      "evidence": "GreenPOS Cash + Buraqmart Autocount cash; eventually banked to AMB via Safeguards — timing in §3." },
+    { "label": "CFP Voucher — redemption against pre-paid balance (no bank movement)",
+      "amount": 13489.96, "evidence": "..." },
     { "label": "BUDI95 — IPTB-claimable receivable (gov claim, not banked today)",
-      "amount": 11236.33,
-      "evidence": "PUKAL BUDI95 receipts (Shift A + Shift B); claimed back from IPTB." },
-    { "label": "CFP Vouchers — redemption against pre-paid balance (no bank movement)",
-      "amount": 13489.96,
-      "evidence": "9 redemption lines on CFP report; matches GreenPOS Voucher MOP." },
-    { "label": "Cash on hand — today's till change (closing − opening)",
-      "amount":    19.01,
-      "evidence": "Reconciled in §3 cash flow." }
+      "amount": 11236.33, "evidence": "..." },
+    { "label": "CFP Top-up (non-revenue) — direct credit to MBB 510161015366",
+      "amount":   967.50, "evidence": "..." }
   ],
   "sum_components": 49654.60,                 // arithmetic sum of every row above
   "passed": true,                             // sum_components == total_inflow ?
-  "result": "✓ Pass — total inflow reconciles to the channel breakdown",
+  "result": "✓ Pass — total inflow reconciles to channel breakdown",
   "finding_n": null                           // set when passed:false
 }
 ```
