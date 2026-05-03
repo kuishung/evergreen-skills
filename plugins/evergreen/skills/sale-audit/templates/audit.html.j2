@@ -329,6 +329,64 @@
       </tr>
     </tfoot>
   </table>
+
+  {# Silent accounts footer note — names the approved §2 accounts that
+     received nothing today. Keeps the rogue-routing transparency
+     without printing zero rows in the table above. #}
+  {% if data.section_2b.silent_accounts %}
+  <div class="note silent-accounts">
+    <strong>{{ labels.section_2b.silent_accounts_label }}</strong>
+    {{ data.section_2b.silent_accounts | join(', ') }}.
+    {% if data.section_2b.silent_accounts_note %}
+    <em>{{ data.section_2b.silent_accounts_note }}</em>
+    {% endif %}
+  </div>
+  {% endif %}
+  {% endif %}
+
+  {# §2c — Expected bank credits.
+     Per-account view: for each approved §2 bank account that should
+     receive a credit today, show the expected amount and source. The
+     operator uses this to verify against tomorrow's bank statements;
+     actual clearance verification is out of scope per §6 r.11 (moved
+     to a separate bank-clearance skill). Rows include only accounts
+     with expected credit > 0. #}
+  {% if data.section_2c and data.section_2c.rows %}
+  <h2 class="section-band sub-band">{{ labels.section_2c.title }}</h2>
+
+  {% if data.section_2c.subtitle %}
+  <div class="note" style="margin:0 0 2mm 0;">{{ data.section_2c.subtitle|safe }}</div>
+  {% endif %}
+
+  <table class="audit recon-summary">
+    <thead>
+      <tr>
+        <th>{{ labels.section_2c.col_account }}</th>
+        <th class="num">{{ labels.section_2c.col_amount }}</th>
+        <th>{{ labels.section_2c.col_source }}</th>
+        <th>{{ labels.section_2c.col_clearance }}</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for row in data.section_2c.rows %}
+      <tr>
+        <td>{{ row.account }}</td>
+        <td class="num">{{ money(row.amount) }}</td>
+        <td><span class="muted">{{ row.source }}</span></td>
+        <td><span class="muted">{{ row.expected_clearance }}</span></td>
+      </tr>
+      {% endfor %}
+    </tbody>
+    {% if data.section_2c.total_to_clear is defined %}
+    <tfoot>
+      <tr class="total">
+        <td>{{ labels.section_2c.total_label }}</td>
+        <td class="num">{{ money(data.section_2c.total_to_clear) }}</td>
+        <td colspan="2"><span class="muted">{{ labels.section_2c.total_caption }}</span></td>
+      </tr>
+    </tfoot>
+    {% endif %}
+  </table>
   {% endif %}
 
   {# §3 redesigned per §9.5: single arithmetic flow, no FR/Computed split.

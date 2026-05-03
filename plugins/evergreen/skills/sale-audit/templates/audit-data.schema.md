@@ -21,7 +21,8 @@ The renderer (`../render/render-audit.py`) takes one JSON object and renders it 
 | `revenue` | object | See **Revenue object** below. |
 | `cfp_deposit` | object | See **CFP Deposit object** below. |
 | `section_2` | object | Bank-grouped channel table (slip-by-slip evidence). See below. |
-| `section_2b` | object | Inflow reconciliation summary — every component of `inflow.total` accounted for. See below. |
+| `section_2b` | object | Inflow reconciliation summary — every component of `inflow.total` accounted for. Per-revenue-component view. See below. |
+| `section_2c` | object | Per-account expected-bank-credits table — watch-list for tomorrow's bank statements. See below. |
 | `section_3_cash` | object | Single arithmetic flow + FR comparison. See below. |
 | `section_3_fr_aggregation` | object | FR-vs-slips reconciliation. See below. |
 | `section_4_fuel` | object | One row per fuel product. See below. |
@@ -124,11 +125,11 @@ The bank-grouped table no longer carries a foot reconciliation row — that role
 
 ## Section 2b — Inflow reconciliation summary
 
-Per-account list of where today's revenue + non-revenue ended up, framed so the sum reconciles **exactly** with `data.inflow.total` by construction (each row is independently derived from POS / slips / reports).
+Revenue-component list of where today's revenue + non-revenue ended up, framed so the sum reconciles **exactly** with `data.inflow.total` by construction (each row is independently derived from POS / slips / reports).
 
-Recommended ordering of rows:
+Recommended row ordering (only rows with `amount > 0` appear in `rows`; approved §2 accounts that received nothing today are named in `silent_accounts` instead, rendered as a footer note — see "silent_accounts" field below):
 
-1. **One row per approved bank account** (§2 list — six accounts: 3 AmBank + 3 Maybank). Each row reports **non-cash revenue only** (Card + IFT + Cheque) routed to that account today, with slip evidence cited inline. Accounts that received nothing show `0.00` so the audit visibly confirms no rogue routing to non-approved accounts.
+1. **One row per approved bank account** that had non-cash revenue today (Card + IFT + Cheque routed to that account). Slip evidence cited inline. Accounts with **zero** non-cash revenue are dropped from `rows` and listed in `silent_accounts` instead.
 2. **Cash — collected today**. Single line; POS-derived (GreenPOS Cash tender + Buraqmart cash + cash CFP top-up). The amount is today's cash revenue, regardless of whether Safeguards has banked it yet — that timing question lives in §3. The Safeguards slip evidence in §2 proves cash physically banked but doesn't appear here.
 3. **CFP Voucher — redemption**. Pre-paid balance consumed against fuel; no bank movement. Evidenced by CFP report redemption lines.
 4. **BUDI95 — IPTB-claimable receivable**. Gov subsidy not banked today. Evidenced by PUKAL BUDI95 receipts.
@@ -156,10 +157,45 @@ Recommended ordering of rows:
     { "label": "CFP Top-up (non-revenue) — direct credit to MBB 510161015366",
       "amount":   967.50, "evidence": "..." }
   ],
+  "silent_accounts": [                        // approved §2 accounts with zero inflow today
+    "AMB 8881058618135",
+    "AMB 8881058618157",
+    "MBB 560166149415",
+    "MBB 560166149422"
+  ],
+  "silent_accounts_note":                     // optional clarifying caveat below the silent list
+    "AMB 8881058618135 receives Safeguards cash deposits — those amounts are counted under \"Cash — collected today\" above.",
   "sum_components": 49654.60,                 // arithmetic sum of every row above
   "passed": true,                             // sum_components == total_inflow ?
   "result": "✓ Pass — total inflow reconciles to channel breakdown",
   "finding_n": null                           // set when passed:false
+}
+```
+
+`silent_accounts` is optional — omit or pass `[]` if every approved account had inflow today. When non-empty, the template renders a footer note under the §2b table naming the silent accounts so the rogue-routing transparency is preserved without printing zero rows.
+
+## Section 2c — Expected bank credits
+
+Per-account view: for each approved §2 bank account that should receive a credit today, the **expected amount** and the **slip-evidenced source**. The operator uses this as a watch-list for tomorrow's bank statements; **actual clearance verification is out of scope** per §6 r.11 (it lives in a separate bank-clearance skill that hasn't shipped yet). Cash via Safeguards normally clears T+0 to T+1; IFT clears same-day; Merchant Settlement clears T+1; cheques clear T+1..T+3.
+
+```jsonc
+{
+  "subtitle": "Watch-list for tomorrow's bank statements...",
+  "rows": [
+    { "account": "AMB 8881058618135 (G4S clearing)",
+      "amount": 22344.00,
+      "source": "Safeguards CDM cash deposit (8 G4S consolidated vouchers, see §2)",
+      "expected_clearance": "T+0..T+1" },
+    { "account": "AMB 8881058618146",
+      "amount": 1597.80,
+      "source": "13 IFT Non-CFP slips RM 524.50 + 3 Merchant Settlement slips RM 1,073.30",
+      "expected_clearance": "T+0 (IFT) / T+1 (Merchant)" },
+    { "account": "MBB 510161015366",
+      "amount": 967.50,
+      "source": "1 CFP Top-up TTCFP slip via PetrolFox IFT",
+      "expected_clearance": "T+0" }
+  ],
+  "total_to_clear": 24909.30                  // sum of every row.amount above
 }
 ```
 

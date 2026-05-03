@@ -1,9 +1,9 @@
 {
   "schema_version": 2,
   "language": "en",
-  "skill_version": "0.20.0",
-  "skill_updated": "2026-05-03 22:00",
-  "generated_at": "2026-05-03 22:00",
+  "skill_version": "0.26.0",
+  "skill_updated": "2026-05-04 01:45",
+  "generated_at": "2026-05-04 01:45",
 
   "station": {
     "code": "BL",
@@ -228,27 +228,12 @@
   },
 
   "section_2b": {
-    "subtitle": "Headline reconciliation — every component of §1 Total Inflow accounted for, listed per approved bank account (§2). Each per-account row shows <strong>non-cash revenue</strong> only (Card + IFT + Cheque). Cash revenue is its own line (POS-derived; banked via Safeguards at variable timing, reconciled in §3). BUDI95 IPTB receivable + CFP voucher redemption + CFP top-up complete the reconciliation. Sum-of-components must equal §1 Total Inflow exactly — by construction, since each row is independently derived from POS / slips / reports.",
+    "subtitle": "Headline reconciliation — every component of §1 Total Inflow accounted for. Each per-account row shows <strong>non-cash revenue</strong> only (Card + IFT + Cheque). Cash revenue is its own line (POS-derived; banked via Safeguards at variable timing, reconciled in §3). BUDI95 IPTB receivable + CFP voucher redemption + CFP top-up complete the reconciliation. Only rows with inflow > 0 are listed; approved §2 accounts that received nothing today are named in the footer note. Sum-of-components must equal §1 Total Inflow exactly — by construction, since each row is independently derived from POS / slips / reports.",
     "total_inflow": 49654.60,
     "rows": [
-      { "label": "AMB 8881058618135 — non-cash revenue (Card + IFT + Cheque)",
-        "amount":     0.00,
-        "evidence": "No non-cash revenue routed here today." },
       { "label": "AMB 8881058618146 — non-cash revenue (Card + IFT + Cheque)",
         "amount":  1597.80,
         "evidence": "13 IFT slips RM 524.50 + 3 Merchant slips RM 1,073.30 — see §2 detail." },
-      { "label": "AMB 8881058618157 — non-cash revenue",
-        "amount":     0.00,
-        "evidence": "No inflow today." },
-      { "label": "MBB 510161015366 — non-cash revenue",
-        "amount":     0.00,
-        "evidence": "No revenue routed here today; CFP Top-up to this account shown separately below." },
-      { "label": "MBB 560166149415 — non-cash revenue",
-        "amount":     0.00,
-        "evidence": "No inflow today." },
-      { "label": "MBB 560166149422 — non-cash revenue",
-        "amount":     0.00,
-        "evidence": "No inflow today." },
       { "label": "Cash — collected today (POS Cash tender + Buraqmart cash + cash CFP top-up)",
         "amount": 22363.01,
         "evidence": "GreenPOS Cash + Buraqmart Autocount cash (system-derived); eventually banked to AMB via Safeguards — timing reconciled in §3." },
@@ -262,10 +247,36 @@
         "amount":   967.50,
         "evidence": "1 TTCFP slip — see §2 CFP Top-up block." }
     ],
+    "silent_accounts": [
+      "AMB 8881058618135",
+      "AMB 8881058618157",
+      "MBB 560166149415",
+      "MBB 560166149422"
+    ],
+    "silent_accounts_note": "Other approved accounts (§2 list) had no non-cash inflow today. AMB 8881058618135 receives Safeguards cash deposits — those amounts are counted under \"Cash — collected today\" above and detailed in §2's Safeguards channel.",
     "sum_components": 49654.60,
     "passed": true,
     "result": "✓ Pass — total inflow reconciles to channel breakdown",
     "finding_n": null
+  },
+
+  "section_2c": {
+    "subtitle": "Watch-list for tomorrow's bank statements — what each approved §2 account should be credited with from today's audit. Cash via Safeguards usually clears T+0 to T+1 (G4S consolidates and deposits next business day); IFT clears same-day; Merchant Settlement clears T+1 for AmBank EDC; cheques (none today) would clear T+1..T+3.",
+    "rows": [
+      { "account": "AMB 8881058618135 (G4S clearing)",
+        "amount": 22344.00,
+        "source": "Safeguards CDM cash deposit (8 G4S consolidated vouchers, see §2)",
+        "expected_clearance": "T+0..T+1" },
+      { "account": "AMB 8881058618146",
+        "amount": 1597.80,
+        "source": "13 IFT Non-CFP slips RM 524.50 + 3 Merchant Settlement slips RM 1,073.30 (see §2)",
+        "expected_clearance": "T+0 (IFT) / T+1 (Merchant)" },
+      { "account": "MBB 510161015366",
+        "amount": 967.50,
+        "source": "1 CFP Top-up TTCFP slip via PetrolFox IFT (see §2 CFP Top-up block)",
+        "expected_clearance": "T+0" }
+    ],
+    "total_to_clear": 24909.30
   },
 
   "section_3_cash": {

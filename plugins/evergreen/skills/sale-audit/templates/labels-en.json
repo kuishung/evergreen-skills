@@ -53,7 +53,19 @@
     "sum_components_label": "Sum of components",
     "col_label": "Channel / category",
     "col_amount": "Amount (RM)",
-    "col_evidence": "Evidence"
+    "col_evidence": "Evidence",
+    "silent_accounts_label": "Other approved accounts (§2 list) had no inflow today:"
+  },
+
+  "section_2c": {
+    "title": "Section 2c — Expected bank credits",
+    "subtitle": "What each approved §2 bank account should be credited with today (or T+n for cheques / merchant settlements). Use this as the watch-list for tomorrow's bank statements; <strong>actual clearance verification is out of scope per §6 r.11</strong> — handled by a separate bank-clearance skill.",
+    "col_account": "Account",
+    "col_amount": "Expect (RM)",
+    "col_source": "Source / channel (slip evidence)",
+    "col_clearance": "T+n",
+    "total_label": "Total to clear",
+    "total_caption": "= Cash banked-in + non-cash bank credits today (excludes BUDI95 IPTB receivable + CFP voucher redemption — those don't bank)."
   },
 
   "legend": {

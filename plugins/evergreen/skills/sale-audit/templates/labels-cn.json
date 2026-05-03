@@ -53,7 +53,19 @@
     "sum_components_label": "各项合计",
     "col_label": "渠道 / 类别",
     "col_amount": "金额 (RM)",
-    "col_evidence": "证据"
+    "col_evidence": "证据",
+    "silent_accounts_label": "§2 名单中其他已核准账户今日无任何流入："
+  },
+
+  "section_2c": {
+    "title": "第 2c 节 — 预计银行入账",
+    "subtitle": "每个已核准 §2 银行账户今日（或支票 / 商户结算的 T+n）预计应入账金额。可作为明日银行月结单的对账清单；<strong>实际清算核对已超出本审计范围，依 §6 r.11 由独立银行清算技能处理</strong>。",
+    "col_account": "账户",
+    "col_amount": "预计 (RM)",
+    "col_source": "来源 / 渠道（凭单证据）",
+    "col_clearance": "T+n",
+    "total_label": "待清算合计",
+    "total_caption": "= 今日存入银行的现金 + 非现金银行入账（不含 BUDI95 IPTB 应收及 CFP 凭证消耗 — 此两项不经银行）。"
   },
 
   "legend": {
