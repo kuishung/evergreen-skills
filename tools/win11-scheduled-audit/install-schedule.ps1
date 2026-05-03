@@ -245,7 +245,17 @@ WHATSAPP NOTIFICATIONS (whatsapp-send skill, chained per sale-audit ``§8`` step
 - WhatsApp recipients path: $($Cfg.RecipientsPath)
 $driveLine
 
-After both PDFs are written for each station (and the MIRROR step above is done if applicable), invoke the whatsapp-send skill (per sale-audit ``§8`` step 6) — best-effort, never blocks the audit. The WhatsApp body's "📂" line should point at the Drive folder URL above (recipients then navigate to <YYYY>/<YYYY-MM>/<YYYY-MM-DD>/ to see today's PDFs). If the send fails for any reason, log the failure and continue; do NOT raise it as a §6 audit finding (it's an operational issue, not an audit issue).
+After both PDFs are written for each station (and the MIRROR step above is done if applicable), invoke whatsapp-send (per sale-audit ``§8`` step 6) — best-effort, never blocks the audit. The message body is a SINGLE LINE in this exact shape, one per station:
+
+    <STATION> Sale Audit for <YYYY-MM-DD> ready: <pdf-folder-path>
+
+…where <pdf-folder-path> is the LOCAL audit-output date folder (the ``$($Cfg.AuditOutputRoot)\<YYYY>\<YYYY-MM>\<YYYY-MM-DD>`` path, NOT a https://drive.google.com URL). Concrete example for today's run:
+
+    TK Sale Audit for $auditDate ready: $($Cfg.AuditOutputRoot)\$($auditDate.Substring(0,4))\$($auditDate.Substring(0,7))\$auditDate
+
+No emoji, no findings list, no Drive URL. Recipients open the actual PDF when they need detail; the message just signals that today's audit has run.
+
+If the send fails for any reason, log the failure and continue; do NOT raise it as a §6 audit finding (operational issue, not an audit issue).
 "@
 }
 
