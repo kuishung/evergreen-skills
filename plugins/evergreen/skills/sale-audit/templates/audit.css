@@ -66,6 +66,18 @@
   .no-print { display: none; }
 }
 
+/* Explicit page-start hooks. Used on the elements that should start
+   a fresh page in the printed PDF (per the user's section-by-page
+   plan: §1 page 1, §2 page 2+, §3 new page, §4+§4b+§5 one page,
+   §6 new page). The browser preview ignores these; they only fire
+   in paged-media mode.
+   page-break-before is the legacy alias; both are kept so the rule
+   works in older renderers and modern paged-media engines alike. */
+.page-start {
+  break-before: page;
+  page-break-before: always;
+}
+
 html, body {
   margin: 0;
   padding: 0;

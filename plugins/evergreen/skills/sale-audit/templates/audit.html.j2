@@ -179,9 +179,11 @@
      grouped by bank account with per-bank subtotals. The slip-level
      detail (Doc/Type/Amt/Date/Uniq/Acct/POS/InFR) lives directly under
      each bank's channel groups. The Cleared column is dropped — bank
-     clearance moves to a separate skill. #}
+     clearance moves to a separate skill.
+     `page-start` forces §2 onto a new page (continues to as many
+     pages as the table needs). #}
 
-  <h2 class="section-band">{{ labels.section_2.title }}</h2>
+  <h2 class="section-band page-start">{{ labels.section_2.title }}</h2>
 
   {% if data.section_2.subtitle %}
   <div class="note" style="margin:0 0 2mm 0;">{{ data.section_2.subtitle }}</div>
@@ -327,9 +329,10 @@
   {% endif %}
 
   {# §3 redesigned per §9.5: single arithmetic flow, no FR/Computed split.
-     Old §2 fr_aggregation moves here as §3a (sibling sub-block). #}
+     Old §2 fr_aggregation moves here as §3a (sibling sub-block).
+     `page-start` puts §3 on a fresh page after §2 finishes. #}
 
-  <h2 class="section-band">{{ labels.section_3.title }}</h2>
+  <h2 class="section-band page-start">{{ labels.section_3.title }}</h2>
 
   <div class="split-50">
 
@@ -435,7 +438,11 @@
 
   </div>
 
-  <div class="split-50">
+  {# §4 + §4b live in a split-50. `page-start` on the wrapper puts the
+     pair on a fresh page so they appear together with §5 underneath
+     them — keeping all of §4 / §4b / §5 on one page per the user's
+     section-by-page plan. #}
+  <div class="split-50 page-start">
 
     <div>
       <h2 class="section-band">{{ labels.section_4.title }}</h2>
@@ -497,7 +504,7 @@
   <h2 class="section-band">{{ labels.section_5.title }}</h2>
   <p class="note" style="margin:1mm 0 4mm 0;">{{ data.section_5_checklist|safe }}</p>
 
-  <h2 class="section-band">{{ labels.section_6.title }}</h2>
+  <h2 class="section-band page-start">{{ labels.section_6.title }}</h2>
   <ul class="findings">
     {% for f in data.section_6_findings %}
     <li>
