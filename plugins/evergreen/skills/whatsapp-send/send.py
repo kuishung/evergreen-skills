@@ -81,15 +81,22 @@ def _matches(field: list, requested: set[str]) -> bool:
 
 
 def filter_recipients(
-    rows: list[dict], station: str, languages: set[str], report: str
+    rows: list[dict], stations: set[str], languages: set[str], report: str
 ) -> list[dict]:
-    """Return active rows where stations, languages, and reports all admit."""
+    """Return active rows where stations, languages, and reports all admit.
+
+    `stations` is a set so callers can pass either a single station
+    ({"TK"}) or the union of all stations ({"TK","BS","BL"}) to send
+    one message per audit run that covers all stations at once. A row's
+    `stations` field matches when it contains "*" OR overlaps the
+    requested set — same union semantics as `languages` and `reports`.
+    """
     matched: list[dict] = []
     seen_phones: set[str] = set()
     for r in rows:
         if r.get("active") is False:
             continue
-        if not _matches(r.get("stations", []), {station}):
+        if not _matches(r.get("stations", []), stations):
             continue
         if not _matches(r.get("languages", []), languages):
             continue
@@ -217,7 +224,10 @@ def main() -> int:
         help="Path to recipients JSON file (bulk-send / filter mode)",
     )
 
-    p.add_argument("--station", help="Station code, e.g. TK (required with --recipients)")
+    p.add_argument(
+        "--station",
+        help="Station code(s), comma-separated for multi-station, e.g. 'TK' or 'TK,BS,BL' (required with --recipients)",
+    )
     p.add_argument(
         "--language",
         help="Comma-separated language codes, e.g. EN,CH (required with --recipients)",
@@ -269,12 +279,13 @@ def main() -> int:
         return 1
 
     languages = {lang.strip() for lang in args.language.split(",") if lang.strip()}
-    matches = filter_recipients(rows, args.station, languages, args.report)
+    stations = {s.strip() for s in args.station.split(",") if s.strip()}
+    matches = filter_recipients(rows, stations, languages, args.report)
 
     if not matches:
         # Not an error — just no one routed. Print a warning to stderr and exit 0.
         print(
-            f"WARN: no active recipients matched station={args.station!r} "
+            f"WARN: no active recipients matched stations={sorted(stations)!r} "
             f"language={sorted(languages)!r} report={args.report!r}",
             file=sys.stderr,
         )

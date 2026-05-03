@@ -1,8 +1,8 @@
 ---
 name: whatsapp-send
 description: Use this skill whenever the user (Evergreen back-office) wants to send a WhatsApp message via Twilio — typically a daily-audit notification chained from `sale-audit` after PDFs are produced, but also any ad-hoc "WhatsApp X to Y", "ping the team about ...", "notify management of ..." request. The skill reads the recipient list from a JSON file synced via Google Drive (single source of truth across machines) and Twilio credentials from a local-only file (never committed). Today the channel is **WhatsApp text only** (Twilio Programmable Messaging) — see §6 for why PDF attachment is deferred.
-version: 0.2.0
-updated: 2026-05-01 19:30
+version: 0.3.0
+updated: 2026-05-04 02:00
 ---
 
 # WhatsApp Send — Evergreen Notifications
@@ -144,7 +144,7 @@ Per-recipient errors go to stderr and **do not abort the loop** — the script c
 | `--body` | yes | Message text (UTF-8, supports CJK). 1600-char limit; truncated with ellipsis. |
 | `--to` | one of | Single recipient (single-send mode). Mutually exclusive with `--recipients`. |
 | `--recipients` | one of | Path to recipients JSON (bulk mode). Mutually exclusive with `--to`. |
-| `--station` | yes (bulk) | Station code, e.g. `TK`. |
+| `--station` | yes (bulk) | Station code, e.g. `TK`. **Comma-separated list also accepted** for multi-station union filter, e.g. `TK,BS,BL`. A recipient row matches when its `stations` field contains `"*"` OR overlaps the requested set. (Added in v0.3.0 so sale-audit can send one combined message per audit run instead of one per station.) |
 | `--language` | yes (bulk) | Comma-separated language codes, e.g. `"EN,CH"`. |
 | `--report` | yes (bulk) | Report type, e.g. `sale-audit`. |
 | `--dry-run` | no | Print the request(s) that would be sent and exit `0` without calling Twilio. |

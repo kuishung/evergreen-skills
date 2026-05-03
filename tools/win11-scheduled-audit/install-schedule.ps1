@@ -245,23 +245,27 @@ WHATSAPP NOTIFICATIONS (whatsapp-send skill, chained per sale-audit ``§8`` step
 - WhatsApp recipients path: $($Cfg.RecipientsPath)
 $driveLine
 
-After both PDFs are written for each station (and the MIRROR step above is done if applicable), invoke whatsapp-send (per sale-audit ``§8`` step 6) — best-effort, never blocks the audit. The message body is a SINGLE LINE per station:
+After ALL PDFs are written across all 3 stations (and the MIRROR step above is done if applicable), invoke whatsapp-send ONCE for the whole audit run — NOT once per station. The body is a single line:
 
-    <STATION> Sale Audit <YYYY-MM-DD> ready: <Audit Drive folder URL>
+    Sale Audit <YYYY-MM-DD> ready: <Audit Drive folder URL>
 
-Use the Audit Drive folder URL above — the parent folder URL is short, WhatsApp auto-links it, recipients tap → Drive opens → they navigate to today's <YYYY>/<YYYY-MM>/<YYYY-MM-DD>/ subfolder and pick EN or CH.
+Concrete example for $auditDate (assume Drive URL is https://drive.google.com/drive/folders/1aBcDeFgHiJk):
 
-Concrete example for TK on $auditDate (assume Drive URL is https://drive.google.com/drive/folders/1aBcDeFgHiJk):
+    Sale Audit $auditDate ready: https://drive.google.com/drive/folders/1aBcDeFgHiJk
 
-    TK Sale Audit $auditDate ready: https://drive.google.com/drive/folders/1aBcDeFgHiJk
+If the Audit Drive folder URL is NOT set (the line above starts with "(not set"), fall back to the LOCAL DATE FOLDER path:
 
-If the Audit Drive folder URL is NOT set (the line above starts with "(not set"), fall back to the LOCAL full path of the EN PDF in a single line — like this:
+    Sale Audit $auditDate ready: $($Cfg.AuditOutputRoot)\$($auditDate.Substring(0,4))\$($auditDate.Substring(0,7))\$auditDate
 
-    TK Sale Audit $auditDate ready: $($Cfg.AuditOutputRoot)\$($auditDate.Substring(0,4))\$($auditDate.Substring(0,7))\$auditDate\TK-$($auditDate.Replace('-','_'))-Audit_$($auditDate.Replace('-',''))_HH_MM_EN.pdf
+ONE LINE only. No emoji, no findings list, no per-station dump.
 
-(Where HH_MM is the audit's actual generation hour/minute — substitute the real value from the .pdf you just wrote.)
+Invoke send.py ONCE with --station="TK,BS,BL" so the multi-station union filter sends to anyone matching ANY of those (or having stations:["*"]) — recipients deduped by phone, so each person gets exactly one WhatsApp:
 
-ONE LINE only. No emoji, no findings list, no multi-line file dump. Pass the body to send.py via --body. Send one message per station via --station.
+    python <whatsapp-send-skill-dir>/send.py \
+        --credentials "$($Cfg.TwilioCredsPath)" \
+        --recipients "$($Cfg.RecipientsPath)" \
+        --station "TK,BS,BL" --language "EN,CH" --report sale-audit \
+        --body "<the single-line body you built>"
 
 If the send fails for any reason, log the failure and continue; do NOT raise it as a §6 audit finding (operational issue, not an audit issue).
 "@
