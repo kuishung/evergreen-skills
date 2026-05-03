@@ -147,7 +147,12 @@ def main():
         trim_blocks=True,
         lstrip_blocks=True,
     )
-    env.filters["roman"] = to_roman
+    # to_roman is kept as a defined helper (no-op safety net) but is
+    # NOT wired to the template anymore — per §9.4, findings now render
+    # as Arabic numerals (FINDING 1, 2, 3 ...). Cross-references in
+    # other rows cite the matching integer too. If a future redesign
+    # ever wants Roman back, re-add the filter wiring here.
+    _ = to_roman  # intentionally unused; keep helper available
 
     # Read audit.css and inline it into the template. The HTML must be
     # self-contained because step 2 of the production flow hands it to

@@ -394,3 +394,150 @@ ul.findings .action-label  { font-weight: 700; }
 .red     { color: var(--variance-red); }
 .tickbox { font-weight: 700; }
 .tickbox.x { color: var(--variance-red); }
+
+/* --- 15. Bank-grouped channel table (§2) --------------------------- */
+table.audit.channel-table tbody tr.bank-header td {
+  background: var(--brand-dark);
+  color: #fff;
+  font-weight: 700;
+  font-size: 9pt;
+  padding: 1.8mm 3mm;
+  border-top: 0.4mm solid var(--brand-dark);
+  border-bottom: 0.2mm solid var(--brand-dark);
+}
+table.audit.channel-table tbody tr.bank-header.cfp td {
+  background: var(--warn-border);
+  color: #fff;
+}
+table.audit.channel-table tbody tr.bank-header.receivables td {
+  background: var(--brand-mid);
+  color: #fff;
+}
+table.audit.channel-table tbody tr.channel-header td {
+  background: var(--brand-tint);
+  color: var(--text);
+  font-style: italic;
+  font-size: 8pt;
+  padding: 1mm 3mm 1mm 6mm;
+  border-bottom: 0.1mm solid var(--border-soft);
+}
+table.audit.channel-table tbody tr.bank-subtotal td {
+  background: var(--bg-card);
+  font-weight: 700;
+  border-top: 0.25mm solid var(--brand-dark);
+  border-bottom: 0.4mm solid var(--brand-dark);
+  padding: 1.4mm 3mm;
+}
+table.audit.channel-table tbody tr.bank-subtotal.cfp td {
+  background: #FBF3D6;
+}
+table.audit.channel-table tbody tr.bank-subtotal.receivables td {
+  background: #E8F0EC;
+}
+
+/* Striping rule needs to skip header / subtotal rows so they keep
+   their own backgrounds. The default :nth-child(even) above tints
+   them with brand-tint, which clashes with the bank-header brand-dark.
+   Reset explicitly. */
+table.audit.channel-table tbody tr.bank-header:nth-child(even) td,
+table.audit.channel-table tbody tr.channel-header:nth-child(even) td,
+table.audit.channel-table tbody tr.bank-subtotal:nth-child(even) td {
+  background: inherit;   /* keep the row's own background, not the stripe */
+}
+table.audit.channel-table tbody tr.bank-header:nth-child(even) td { background: var(--brand-dark); }
+table.audit.channel-table tbody tr.bank-header.cfp:nth-child(even) td { background: var(--warn-border); }
+table.audit.channel-table tbody tr.bank-header.receivables:nth-child(even) td { background: var(--brand-mid); }
+table.audit.channel-table tbody tr.channel-header:nth-child(even) td { background: var(--brand-tint); }
+table.audit.channel-table tbody tr.bank-subtotal:nth-child(even) td { background: var(--bg-card); }
+table.audit.channel-table tbody tr.bank-subtotal.cfp:nth-child(even) td { background: #FBF3D6; }
+table.audit.channel-table tbody tr.bank-subtotal.receivables:nth-child(even) td { background: #E8F0EC; }
+
+/* --- 16. Finding cross-reference badge (§9.6) ----------------------
+   Inline "see FINDING n" stamp next to every red-coloured cell that
+   has a matching §6 entry. Goal: the eye jumps from a red flag
+   straight to the right finding number without scanning §6.        */
+.finding-ref {
+  display: inline-block;
+  margin-left: 1.5mm;
+  padding: 0.2mm 1.4mm;
+  background: var(--variance-red);
+  color: #fff;
+  font-size: 7.5pt;
+  font-weight: 700;
+  border-radius: 0.6mm;
+  white-space: nowrap;
+  vertical-align: baseline;
+  letter-spacing: 0.05px;
+}
+
+/* --- 17. §3 cash-flow arithmetic table -----------------------------
+   Per §9.5: a clean four-line arithmetic flow
+       Opening
+     + Collected
+     − Banked-in
+     = Expected
+   followed by a single FR-vs-expected comparison line below.        */
+table.audit.cash-flow {
+  margin-bottom: 2mm;
+}
+table.audit.cash-flow tbody td {
+  padding: 1.6mm 3mm;
+  border-bottom: 0.15mm solid var(--border-soft);
+  font-size: 9pt;
+}
+table.audit.cash-flow tbody tr.breakdown td {
+  padding: 0.5mm 3mm 1.5mm 8mm;
+  font-size: 8pt;
+  border-bottom: 0.15mm solid var(--border-soft);
+}
+table.audit.cash-flow tbody tr.total td {
+  font-weight: 700;
+  font-size: 10pt;
+  border-top: 0.4mm solid var(--brand-dark);
+  background: var(--brand-tint);
+  padding: 2mm 3mm;
+}
+table.audit.cash-flow .op {
+  display: inline-block;
+  width: 4mm;
+  font-weight: 700;
+  color: var(--brand-mid);
+}
+
+.cash-fr-check {
+  background: #E8F0EC;
+  border-left: 0.6mm solid var(--brand-mid);
+  padding: 2mm 4mm;
+  margin: 0 0 3mm 0;
+  font-size: 9pt;
+  display: flex;
+  flex-direction: column;
+  gap: 0.6mm;
+}
+.cash-fr-check.variance {
+  background: var(--variance-bg);
+  border-left-color: var(--variance-red);
+}
+.cash-fr-check-label {
+  font-weight: 700;
+  margin-right: 1.2mm;
+}
+.cash-fr-check-amount {
+  margin-right: 2mm;
+}
+
+/* --- 18. Section sub-headers (e.g., §3a) --------------------------- */
+.sub-header {
+  font-size: 10pt;
+  font-weight: 700;
+  margin: 0 0 1mm 0;
+  color: var(--text);
+}
+.revenue-segments tbody td:nth-child(2),
+.revenue-segments tbody td:nth-child(3),
+.revenue-segments tbody td:nth-child(4),
+.revenue-segments tfoot td:nth-child(2),
+.revenue-segments tfoot td:nth-child(3),
+.revenue-segments tfoot td:nth-child(4) {
+  font-variant-numeric: tabular-nums;
+}

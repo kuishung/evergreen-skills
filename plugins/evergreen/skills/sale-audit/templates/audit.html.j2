@@ -15,9 +15,9 @@
 {%- if v is none -%}—{%- else -%}{{ '{:.1f}%'.format(v) }}{%- endif -%}
 {%- endmacro -%}
 
-{%- macro varcell(v) -%}
+{%- macro signed(v) -%}
 {%- if v is none -%}<span class="muted">—</span>
-{%- else -%}{{ '{:+,.2f}'.format(v) | replace('+', '+') if v > 0 else '{:,.2f}'.format(v) }}
+{%- else -%}{{ '{:+,.2f}'.format(v) if v > 0 else '{:,.2f}'.format(v) }}
 {%- endif -%}
 {%- endmacro -%}
 
@@ -28,16 +28,18 @@
 {%- endif -%}
 {%- endmacro -%}
 
-{%- macro cleared_cell(c) -%}
-{%- if c.kind == 'missing' -%}<span class="tickbox x">{{ c.text }}</span>
-{%- elif c.kind == 'verified' -%}<span class="tickbox">{{ c.text }}</span>
-{%- else -%}{{ c.text }}
+{%- macro pos_result(row) -%}
+{%- if row.passed -%}<span class="tickbox">{{ row.result }}</span>
+{%- else -%}<span class="tickbox x">{{ row.result }}</span>{% if row.finding_n %} <span class="finding-ref">{{ labels.finding_ref_prefix }} {{ row.finding_n }}</span>{% endif %}
 {%- endif -%}
 {%- endmacro -%}
 
-{%- macro pos_result(row) -%}
-{%- if row.passed -%}<span class="tickbox">{{ row.result }}</span>
-{%- else -%}<span class="tickbox x">{{ row.result }}</span>
+{# Inline cross-reference badge: "see FINDING <n>".
+   Renders only when the row carries finding_n. If a row is styled
+   variance/red but finding_n is missing, the audit-data is broken;
+   the badge below is the audit author's responsibility to populate. #}
+{%- macro finding_ref(n) -%}
+{%- if n -%}<span class="finding-ref">{{ labels.finding_ref_prefix }} {{ n }}</span>
 {%- endif -%}
 {%- endmacro -%}
 <!DOCTYPE html>
@@ -62,7 +64,6 @@
     <span><span class="meta-label">{{ labels.meta.business_date }}:</span><span class="meta-value">{{ data.business_date }}</span></span>
     <span><span class="meta-label">{{ labels.meta.prepared_by }}:</span><span class="meta-value">{{ data.meta.prepared_by }}</span></span>
     <span><span class="meta-label">{{ labels.meta.fund_report }}:</span><span class="meta-value">{{ data.meta.fund_report_status }}</span></span>
-    <span><span class="meta-label">{{ labels.meta.bank_stmts }}:</span><span class="meta-value">{{ data.meta.bank_stmts_status }}</span></span>
   </div>
 
   {% if data.delivery and data.delivery.occurred %}
@@ -89,15 +90,22 @@
   </div>
   <div class="headline-caption">{{ labels.section_1.caption }}</div>
 
+  {# ── Revenue table — §9.1: Petrol (litres + BUDI95 / Collected) +
+       Diesel (litres) + Buraqmart + iBing (TK only) + Lot Rental.
+       Every figure that used to live in an explanatory paragraph now
+       sits in a cell. ── #}
   <div class="card-row">
 
     <div class="card">
       <div class="card-header">{{ labels.section_1.revenue_card_header }} — RM {{ money(data.revenue.total) }}</div>
       <div class="card-body">
-        <table class="audit">
+        <table class="audit revenue-segments">
           <thead>
             <tr>
               <th>{{ labels.section_1.col_segment }}</th>
+              <th class="num">{{ labels.section_1.col_litres }}</th>
+              <th class="num">{{ labels.section_1.col_budi95 }}</th>
+              <th class="num">{{ labels.section_1.col_collected }}</th>
               <th class="num">{{ labels.section_1.col_rm }}</th>
               <th>{{ labels.section_1.col_share }}</th>
             </tr>
@@ -106,6 +114,9 @@
             {% for seg in data.revenue.segments %}
             <tr>
               <td>{{ seg.name }}</td>
+              <td class="num">{% if seg.litres %}{{ seg.litres }}{% else %}<span class="muted">—</span>{% endif %}</td>
+              <td class="num">{% if seg.budi95_rm is not none %}{{ money(seg.budi95_rm) }}{% else %}<span class="muted">—</span>{% endif %}</td>
+              <td class="num">{% if seg.collected_rm is not none %}{{ money(seg.collected_rm) }}{% else %}<span class="muted">—</span>{% endif %}</td>
               <td class="num">{{ money(seg.amount) }}</td>
               <td>
                 <div class="share-cell">
@@ -117,13 +128,17 @@
             {% endfor %}
           </tbody>
           <tfoot>
-            <tr class="total"><td>{{ labels.total }}</td><td class="num">{{ money(data.revenue.total) }}</td><td></td></tr>
+            <tr class="total">
+              <td>{{ labels.total }}</td>
+              <td class="num">{% if data.revenue.litres_total %}{{ data.revenue.litres_total }}{% else %}<span class="muted">—</span>{% endif %}</td>
+              <td class="num">{{ money(data.revenue.budi95_total) }}</td>
+              <td class="num">{{ money(data.revenue.collected_total) }}</td>
+              <td class="num">{{ money(data.revenue.total) }}</td>
+              <td></td>
+            </tr>
           </tfoot>
         </table>
       </div>
-      {% if data.revenue.footer_note %}
-      <div class="card-footer-note">{{ data.revenue.footer_note }}</div>
-      {% endif %}
     </div>
 
     <div class="card alert">
@@ -155,74 +170,25 @@
 
   </div>
 
-  <div class="channels-row">
-    <div>
-      <div class="card-header" style="background:transparent;border:none;padding:0 0 1mm 0;">
-        {{ labels.section_1.channels_table_header }}
-      </div>
-      <table class="audit">
-        <thead>
-          <tr>
-            <th>{{ labels.section_1.col_channel }}</th>
-            <th class="num">{{ labels.section_1.col_total_rm }}</th>
-            <th class="num">{{ labels.section_1.col_slips }}</th>
-            <th class="num">{{ labels.section_1.col_pct_rev }}</th>
-            <th>{{ labels.section_1.col_notes }}</th>
-          </tr>
-        </thead>
-        <tbody>
-          {% for ch in data.revenue.channels %}
-          <tr>
-            <td>{{ ch.name }}</td>
-            <td class="num">{{ money(ch.amount) }}</td>
-            <td class="num">{{ ch.slips_text|default(ch.slips_count) }}</td>
-            <td class="num">{{ pct(ch.pct_revenue) }}</td>
-            <td>{{ ch.notes }}</td>
-          </tr>
-          {% endfor %}
-        </tbody>
-        <tfoot>
-          <tr class="total">
-            <td>{{ labels.total }}</td>
-            <td class="num">{{ money(data.revenue.channels_total.amount) }}</td>
-            <td class="num">{{ data.revenue.channels_total.slips_count }}</td>
-            <td class="num">{{ pct(data.revenue.channels_total.pct_revenue) }}</td>
-            <td></td>
-          </tr>
-        </tfoot>
-      </table>
-    </div>
-
-    <div class="donut-wrap">
-      <div class="donut-title">{{ labels.section_1.by_channel }}</div>
-      {% set ns = namespace(start=0) %}
-      {% set angles = [] %}
-      {% for s in data.donut_slices %}
-        {% set _ = angles.append({'color_var': s.color_var, 'start': ns.start, 'end': ns.start + (s.pct * 3.6)}) %}
-        {% set ns.start = ns.start + (s.pct * 3.6) %}
-      {% endfor %}
-      <div class="donut" style="background: conic-gradient({% for a in angles %}var({{ a.color_var }}) {{ '%.2f'|format(a.start) }}deg {{ '%.2f'|format(a.end) }}deg{% if not loop.last %}, {% endif %}{% endfor %});"></div>
-      <div class="donut-legend">
-        {% for s in data.donut_slices %}
-        <div><span class="swatch" style="background:var({{ s.color_var }});"></span>{{ s.label }} {{ pct(s.pct) }}</div>
-        {% endfor %}
-      </div>
-    </div>
-  </div>
-
 </div>
 
 
 {# ════════════════════════════════ PAGE 2 ════════════════════════════════ #}
+{# §9.2 — Revenue Channel table.
+   CFP Top-up block first (non-revenue, only if present), then revenue
+   grouped by bank account with per-bank subtotals. The slip-level
+   detail (Doc/Type/Amt/Date/Uniq/Acct/POS/InFR) lives directly under
+   each bank's channel groups. The Cleared column is dropped — bank
+   clearance moves to a separate skill. #}
 <div class="page page-break">
 
-  <h2 class="section-band">{{ labels.section_2.title }} ({{ data.section_2.subtitle }})</h2>
+  <h2 class="section-band">{{ labels.section_2.title }}</h2>
 
-  {% if data.section_2.deferred_note %}
-  <div class="callout">{{ data.section_2.deferred_note }}</div>
+  {% if data.section_2.subtitle %}
+  <div class="note" style="margin:0 0 2mm 0;">{{ data.section_2.subtitle }}</div>
   {% endif %}
 
-  <table class="audit">
+  <table class="audit channel-table">
     <thead>
       <tr>
         <th>{{ labels.section_2.col_doc }}</th>
@@ -232,27 +198,121 @@
         <th class="center">{{ labels.section_2.col_uniq }}</th>
         <th>{{ labels.section_2.col_acct }}</th>
         <th class="center">{{ labels.section_2.col_pos }}</th>
-        <th>{{ labels.section_2.col_cleared }}</th>
         <th class="center">{{ labels.section_2.col_in_fr }}</th>
         <th>{{ labels.section_2.col_notes }}</th>
       </tr>
     </thead>
     <tbody>
-      {% for slip in data.section_2.slips %}
-      <tr>
-        <td>{{ slip.doc }}</td>
-        <td>{{ slip.type }}</td>
-        <td class="num">{{ money(slip.amount) }}</td>
-        <td class="center">{{ tick(slip.date_ok) }}</td>
-        <td class="center">{{ tick(slip.uniq_ok) }}</td>
-        <td>{{ slip.acct }}</td>
-        <td class="center">{% if slip.pos_ok is none %}<span class="muted">n/a</span>{% else %}{{ tick(slip.pos_ok) }}{% endif %}</td>
-        <td>{{ cleared_cell(slip.cleared) }}</td>
-        <td class="center">{{ in_fr_cell(slip.in_fr) }}</td>
-        <td>{{ slip.notes|safe }}</td>
+
+      {# ── CFP Top-up block (non-revenue) — rendered only when present ── #}
+      {% if data.section_2.cfp_topup %}
+      <tr class="bank-header cfp">
+        <td colspan="9">{{ labels.section_2.cfp_topup_label }} — {{ labels.total }} RM {{ money(data.section_2.cfp_topup.total) }}</td>
+      </tr>
+        {% for ch in data.section_2.cfp_topup.channels %}
+          <tr class="channel-header">
+            <td colspan="9"><em>{{ ch.name }}</em></td>
+          </tr>
+          {% for slip in ch.slips %}
+          <tr>
+            <td>{{ slip.doc }}</td>
+            <td>{{ slip.type }}</td>
+            <td class="num">{{ money(slip.amount) }}</td>
+            <td class="center">{{ tick(slip.date_ok) }}</td>
+            <td class="center">{{ tick(slip.uniq_ok) }}</td>
+            <td>{{ slip.acct }}</td>
+            <td class="center">{% if slip.pos_ok is none %}<span class="muted">n/a</span>{% else %}{{ tick(slip.pos_ok) }}{% endif %}</td>
+            <td class="center">{{ in_fr_cell(slip.in_fr) }}</td>
+            <td>{{ slip.notes|safe }}</td>
+          </tr>
+          {% endfor %}
+        {% endfor %}
+      <tr class="bank-subtotal cfp">
+        <td colspan="2">{{ labels.section_2.cfp_topup_subtotal }}</td>
+        <td class="num">{{ money(data.section_2.cfp_topup.total) }}</td>
+        <td colspan="6"></td>
+      </tr>
+      {% endif %}
+
+      {# ── Revenue per bank ── #}
+      {% for bank in data.section_2.banks %}
+      <tr class="bank-header">
+        <td colspan="9">{{ bank.label }} — {{ labels.total }} RM {{ money(bank.subtotal) }}</td>
+      </tr>
+        {% for ch in bank.channels %}
+          <tr class="channel-header">
+            <td colspan="9"><em>{{ ch.name }}{% if ch.subtotal is not none %} <span class="muted">· {{ money(ch.subtotal) }}</span>{% endif %}</em></td>
+          </tr>
+          {% for slip in ch.slips %}
+          <tr>
+            <td>{{ slip.doc }}</td>
+            <td>{{ slip.type }}</td>
+            <td class="num">{{ money(slip.amount) }}</td>
+            <td class="center">{{ tick(slip.date_ok) }}</td>
+            <td class="center">{{ tick(slip.uniq_ok) }}</td>
+            <td>{{ slip.acct }}</td>
+            <td class="center">{% if slip.pos_ok is none %}<span class="muted">n/a</span>{% else %}{{ tick(slip.pos_ok) }}{% endif %}</td>
+            <td class="center">{{ in_fr_cell(slip.in_fr) }}</td>
+            <td>{{ slip.notes|safe }}</td>
+          </tr>
+          {% endfor %}
+        {% endfor %}
+      <tr class="bank-subtotal">
+        <td colspan="2">{{ bank.label }} — {{ labels.section_2.subtotal_label }}</td>
+        <td class="num">{{ money(bank.subtotal) }}</td>
+        <td colspan="6"></td>
       </tr>
       {% endfor %}
+
+      {# ── Receivables (BUDI95 etc.) — optional ── #}
+      {% if data.section_2.receivables %}
+      <tr class="bank-header receivables">
+        <td colspan="9">{{ labels.section_2.receivables_label }} — {{ labels.total }} RM {{ money(data.section_2.receivables.total) }}</td>
+      </tr>
+        {% for ch in data.section_2.receivables.channels %}
+          <tr class="channel-header">
+            <td colspan="9"><em>{{ ch.name }} <span class="muted">· {{ ch.note }}</span></em></td>
+          </tr>
+          {% for slip in ch.slips %}
+          <tr>
+            <td>{{ slip.doc }}</td>
+            <td>{{ slip.type }}</td>
+            <td class="num">{{ money(slip.amount) }}</td>
+            <td class="center">{% if slip.date_ok is none %}<span class="muted">—</span>{% else %}{{ tick(slip.date_ok) }}{% endif %}</td>
+            <td class="center">{% if slip.uniq_ok is none %}<span class="muted">—</span>{% else %}{{ tick(slip.uniq_ok) }}{% endif %}</td>
+            <td>{{ slip.acct }}</td>
+            <td class="center">{% if slip.pos_ok is none %}<span class="muted">n/a</span>{% else %}{{ tick(slip.pos_ok) }}{% endif %}</td>
+            <td class="center">{{ in_fr_cell(slip.in_fr) }}</td>
+            <td>{{ slip.notes|safe }}</td>
+          </tr>
+          {% endfor %}
+        {% endfor %}
+      <tr class="bank-subtotal receivables">
+        <td colspan="2">{{ labels.section_2.receivables_label }} — {{ labels.section_2.subtotal_label }}</td>
+        <td class="num">{{ money(data.section_2.receivables.total) }}</td>
+        <td colspan="6"></td>
+      </tr>
+      {% endif %}
+
     </tbody>
+    {# ── Reconciliation row at the foot — Total inflow vs Sum of slips ── #}
+    {% if data.section_2.reconciliation %}
+    {% set rec = data.section_2.reconciliation %}
+    <tfoot>
+      <tr class="total{% if not rec.passed %} variance{% endif %}">
+        <td colspan="2">{{ labels.section_2.reconciliation_label }}</td>
+        <td class="num">{{ money(rec.total_inflow) }}</td>
+        <td colspan="6">
+          {{ labels.section_2.reconciliation_vs_slips }} RM {{ money(rec.sum_slips) }}
+          {% if rec.passed %}
+            → <span class="tickbox">{{ rec.result|default('✓ Pass') }}</span>
+          {% else %}
+            → <span class="tickbox x">{{ rec.result|default('✗ Variance') }}</span> {{ finding_ref(rec.finding_n) }}
+          {% endif %}
+        </td>
+      </tr>
+    </tfoot>
+    {% endif %}
   </table>
 
   <div class="legend">
@@ -260,91 +320,136 @@
     <strong>{{ labels.section_2.col_uniq }}</strong> {{ labels.legend.uniq }}&nbsp;
     <strong>{{ labels.section_2.col_acct }}</strong> {{ labels.legend.acct }}&nbsp;
     <strong>{{ labels.section_2.col_pos }}</strong> {{ labels.legend.pos }}&nbsp;
-    <strong>{{ labels.section_2.col_cleared }}</strong> {{ labels.legend.cleared }}&nbsp;
     <strong>{{ labels.section_2.col_in_fr }}</strong> {{ labels.legend.in_fr }}
   </div>
 
-  {% if data.section_2.fr_aggregation %}
-  <h3 style="font-size:10pt;font-weight:700;margin:3mm 0 1mm 0;">{{ labels.section_2.fr_agg_title }}</h3>
-  <p class="note" style="margin:0 0 1mm 0;">{{ labels.section_2.fr_agg_caption }}</p>
-  <table class="audit">
-    <thead>
-      <tr>
-        <th>{{ labels.section_2.col_fr_line }}</th>
-        <th class="num">{{ labels.section_2.col_fr_amount }}</th>
-        <th class="num">{{ labels.section_2.col_sum_slips }}</th>
-        <th class="num">{{ labels.section_2.col_variance }}</th>
-        <th>{{ labels.section_2.col_status }}</th>
-      </tr>
-    </thead>
-    <tbody>
-      {% for row in data.section_2.fr_aggregation %}
-      <tr{% if row.is_variance %} class="variance"{% endif %}>
-        <td>{{ row.line }}</td>
-        <td class="num">{{ money(row.fr_amount) }}</td>
-        <td class="num">{{ money(row.sum_slips) }}</td>
-        <td class="num">{% if row.variance > 0 %}+{{ money(row.variance) }}{% else %}{{ money(row.variance) }}{% endif %}</td>
-        <td class="status">{{ row.status }}</td>
-      </tr>
-      {% endfor %}
-    </tbody>
-    {% if data.section_2.fr_aggregation_total %}
-    {% set ft = data.section_2.fr_aggregation_total %}
-    <tfoot>
-      <tr class="total{% if ft.is_variance %} variance{% endif %}">
-        <td>{{ labels.total }}</td>
-        <td class="num">{{ money(ft.fr_amount) }}</td>
-        <td class="num">{{ money(ft.sum_slips) }}</td>
-        <td class="num">{% if ft.variance and ft.variance > 0 %}+{{ money(ft.variance) }}{% else %}{{ money(ft.variance) }}{% endif %}</td>
-        <td class="status">{{ ft.status }}</td>
-      </tr>
-    </tfoot>
-    {% endif %}
-  </table>
+  {% if data.section_2.safeguards_rule_note %}
+  <div class="note">{{ data.section_2.safeguards_rule_note|safe }}</div>
   {% endif %}
 
 </div>
 
 
 {# ════════════════════════════════ PAGE 3 ════════════════════════════════ #}
-<div class="page">
+{# §3 redesigned per §9.5: single arithmetic flow, no FR/Computed split.
+   §2-aggregation becomes the §6.12 reconciliation between the FR's
+   aggregated lines and the underlying slips (kept here as Section 3a).
+   #}
+<div class="page page-break">
+
+  <h2 class="section-band">{{ labels.section_3.title }}</h2>
 
   <div class="split-50">
 
     <div>
-      <h2 class="section-band">{{ labels.section_3.title }}</h2>
+      {# §3 Cash highlight — arithmetic flow + FR comparison line #}
+      <table class="audit cash-flow">
+        <tbody>
+          <tr>
+            <td>{{ labels.section_3.opening }}</td>
+            <td class="num">{{ money(data.section_3_cash.opening) }}</td>
+          </tr>
+          <tr>
+            <td><span class="op">+</span> {{ labels.section_3.collected }}</td>
+            <td class="num">{{ money(data.section_3_cash.collected) }}</td>
+          </tr>
+          {% if data.section_3_cash.collected_breakdown %}
+          <tr class="breakdown">
+            <td colspan="2"><span class="muted">= {{ data.section_3_cash.collected_breakdown }}</span></td>
+          </tr>
+          {% endif %}
+          <tr>
+            <td><span class="op">−</span> {{ labels.section_3.banked_in }}</td>
+            <td class="num">{{ money(data.section_3_cash.banked_in) }}</td>
+          </tr>
+          <tr class="total">
+            <td><span class="op">=</span> <strong>{{ labels.section_3.expected }}</strong></td>
+            <td class="num"><strong>{{ money(data.section_3_cash.expected) }}</strong></td>
+          </tr>
+        </tbody>
+      </table>
+
+      {% if data.section_3_cash.fr_check %}
+      {% set fc = data.section_3_cash.fr_check %}
+      <div class="cash-fr-check{% if not fc.passed %} variance{% endif %}">
+        <div>
+          <span class="cash-fr-check-label">{{ labels.section_3.fr_closing }}:</span>
+          <span class="cash-fr-check-amount">RM {{ money(fc.fr_closing) }}</span>
+        </div>
+        <div>
+          <span class="cash-fr-check-label">{{ labels.section_3.variance_vs_expected }}:</span>
+          <span class="cash-fr-check-amount">{{ signed(fc.variance) }}</span>
+          {% if fc.passed %}
+            <span class="tickbox">{{ fc.result|default('✓ Pass') }}</span>
+          {% else %}
+            <span class="tickbox x">{{ fc.result|default('✗ Variance') }}</span> {{ finding_ref(fc.finding_n) }}
+          {% endif %}
+        </div>
+      </div>
+      {% endif %}
+
+      {% if data.section_3_cash.footer_note %}
+      <div class="note">{{ data.section_3_cash.footer_note|safe }}</div>
+      {% endif %}
+    </div>
+
+    <div>
+      {# §3a FR aggregation check — was old §2 fr_aggregation #}
+      {% if data.section_3_fr_aggregation and data.section_3_fr_aggregation.rows %}
+      <h3 class="sub-header">{{ labels.section_3.fr_agg_title }}</h3>
+      <p class="note" style="margin:0 0 1mm 0;">{{ labels.section_3.fr_agg_caption }}</p>
       <table class="audit">
         <thead>
           <tr>
-            <th>{{ labels.section_3.col_item }}</th>
-            <th class="num">{{ labels.section_3.col_fr }}</th>
-            <th class="num">{{ labels.section_3.col_computed }}</th>
-            <th class="num">{{ labels.section_3.col_var }}</th>
+            <th>{{ labels.section_3.col_fr_line }}</th>
+            <th class="num">{{ labels.section_3.col_fr_amount }}</th>
+            <th class="num">{{ labels.section_3.col_sum_slips }}</th>
+            <th class="num">{{ labels.section_3.col_variance }}</th>
+            <th>{{ labels.section_3.col_status }}</th>
           </tr>
         </thead>
         <tbody>
-          {% for row in data.section_3_cash.rows %}
-          <tr{% if row.is_variance %} class="variance{% if row.is_total %} total{% endif %}"{% elif row.is_total %} class="total"{% endif %}>
-            <td>{{ row.item }}</td>
-            <td class="num">{{ money(row.fr) }}</td>
-            <td class="num">{{ money(row.computed) }}</td>
-            <td class="num">{{ varcell(row.var) }}</td>
+          {% for row in data.section_3_fr_aggregation.rows %}
+          <tr{% if row.is_variance %} class="variance"{% endif %}>
+            <td>{{ row.line }}</td>
+            <td class="num">{{ money(row.fr_amount) }}</td>
+            <td class="num">{{ money(row.sum_slips) }}</td>
+            <td class="num">{{ signed(row.variance) }}</td>
+            <td class="status">
+              {{ row.status }}
+              {% if row.is_variance %}{{ finding_ref(row.finding_n) }}{% endif %}
+            </td>
           </tr>
           {% endfor %}
         </tbody>
+        {% if data.section_3_fr_aggregation.total %}
+        {% set ft = data.section_3_fr_aggregation.total %}
+        <tfoot>
+          <tr class="total{% if ft.is_variance %} variance{% endif %}">
+            <td>{{ labels.total }}</td>
+            <td class="num">{{ money(ft.fr_amount) }}</td>
+            <td class="num">{{ money(ft.sum_slips) }}</td>
+            <td class="num">{{ signed(ft.variance) }}</td>
+            <td class="status">
+              {{ ft.status }}
+              {% if ft.is_variance %}{{ finding_ref(ft.finding_n) }}{% endif %}
+            </td>
+          </tr>
+        </tfoot>
+        {% endif %}
       </table>
-      <div class="note">
-        <strong>{{ labels.section_3.computed_legend_title }}</strong>
-        <ul style="margin:0.5mm 0 0 4mm;padding:0;">
-          {% for item in labels.section_3.computed_legend %}
-          <li>{{ item|safe }}</li>
-          {% endfor %}
-        </ul>
-      </div>
-      {% if data.section_3_cash.footer_note %}
-      <div class="note">{{ data.section_3_cash.footer_note }}</div>
       {% endif %}
     </div>
+
+  </div>
+
+</div>
+
+
+{# ════════════════════════════════ PAGE 4 ════════════════════════════════ #}
+<div class="page">
+
+  <div class="split-50">
 
     <div>
       <h2 class="section-band">{{ labels.section_4.title }}</h2>
@@ -375,7 +480,9 @@
       {% if data.section_4_fuel.footer_note %}
       <div class="note">{{ data.section_4_fuel.footer_note }}</div>
       {% endif %}
+    </div>
 
+    <div>
       <h2 class="section-band">{{ labels.section_4b.title }}</h2>
       <table class="audit">
         <thead>
@@ -408,7 +515,7 @@
   <ul class="findings">
     {% for f in data.section_6_findings %}
     <li>
-      <span class="finding-title">{{ labels.section_6.finding_prefix }} {{ f.n | roman }} — {{ f.title }}</span>
+      <span class="finding-title">{{ labels.section_6.finding_prefix }} {{ f.n }} — {{ f.title }}</span>
       {{ f.body }}
       <span class="action-label">{{ labels.section_6.action_label }}</span> {{ f.action }}
     </li>

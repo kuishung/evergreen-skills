@@ -1,8 +1,8 @@
 ---
 name: sale-audit
 description: Use this skill whenever the user (Evergreen back-office / management) wants to audit, verify, or check the daily sale submission of a petrol station — TK (Tg. Kapor), BS (Berkat Setia), or BL (Bubul Lama). Triggers include phrases like "audit TK", "audit sale", "check BS sale", "verify fund report", "run daily audit", "daily sale audit for <date>", or any request to reconcile a station's Fund Report against its supporting documents and produce an audit PDF.
-version: 0.16.1
-updated: 2026-05-01 19:30
+version: 0.17.0
+updated: 2026-05-03 20:30
 ---
 
 # Sale Audit — Evergreen Petrol Stations
@@ -216,9 +216,9 @@ The renderer fills the template; the LLM's job is to produce the data values. Fo
     The script reads the recipients JSON, filters by station/language/report/active, dedupes by phone, and sends one WhatsApp per match. Capture stdout (one JSON line per recipient) and stderr (per-recipient errors) into the audit log. **If the send fails for any reason** (creds missing, recipients file missing, Twilio error, network), log the failure and continue — the audit itself is **still successful** because the PDFs are on disk. Never raise a WhatsApp failure as a §6 audit finding (it's an operational issue, not an audit issue).
 7. Reply in chat with the 3–5 most material findings, the absolute paths to both saved PDFs, and a one-line WhatsApp send result aggregating across all stations (e.g., `WhatsApp: TK 2/2, BS 2/2, BL 2/2` or `WhatsApp: send failed — see log`).
 
-## 9. Pending amendments — 2026-05-03 (NOT yet implemented)
+## 9. 2026-05-03 redesign — IMPLEMENTED in v0.17.0
 
-The user is reshaping the §7.2 PDF layout. The bullets below are the **target spec** captured during the 2026-05-03 review session; the renderer / template / schema / sample-data have **not** yet been updated to match. Until they are, the running audit still produces the v0.15.x layout. Implementation will land as a single coordinated pass once the user finishes commenting.
+The §7.2 PDF layout was reshaped during the 2026-05-03 review session and the renderer / template / schema / sample-data / labels were rewritten to match in `sale-audit` v0.17.0 (schema_version bumped from 1 to 2). This section preserves the spec text for context; the template files in `templates/` are now the source of truth for the implementation. **Audits emitted from v0.17.0 onward use the layout described below.**
 
 ### 9.1 Section 1 — Revenue table
 

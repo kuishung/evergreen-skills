@@ -2,13 +2,13 @@
   "title_suffix": "— DAILY SALE AUDIT ·",
   "total": "Total",
   "delivery_today": "Fuel delivery occurred today",
+  "finding_ref_prefix": "see FINDING",
 
   "meta": {
     "station": "Station",
     "business_date": "Business date",
     "prepared_by": "Prepared by",
-    "fund_report": "Fund Report",
-    "bank_stmts": "Bank stmts"
+    "fund_report": "Fund Report"
   },
 
   "section_1": {
@@ -16,69 +16,62 @@
     "total_inflow": "Total Inflow",
     "equals_revenue": "= Revenue",
     "plus_cfp_deposit": "+ CFP Deposit (non-revenue)",
-    "caption": "Total Inflow = Revenue + CFP Deposit (non-revenue).",
-    "revenue_card_header": "Revenue",
+    "caption": "Total Inflow = Revenue + CFP Deposit (non-revenue). Revenue is split by business segment in the table below; the CFP Deposit (customer top-ups, treated as a deposit liability) is shown to the right.",
+    "revenue_card_header": "Revenue — by segment",
     "cfp_card_header": "CFP Deposit — not revenue",
-    "channels_table_header": "Revenue — channel totals from slips/POS",
-    "by_channel": "By channel",
     "col_segment": "Segment",
-    "col_rm": "RM",
+    "col_litres": "Litres",
+    "col_budi95": "BUDI95 (RM)",
+    "col_collected": "Collected (RM)",
+    "col_rm": "Total (RM)",
     "col_share": "Share",
     "col_subchannel": "Sub-channel",
     "col_amt": "Amt",
-    "col_count": "#",
-    "col_channel": "Channel",
-    "col_total_rm": "Total (RM)",
-    "col_slips": "# slips",
-    "col_pct_rev": "% rev",
-    "col_notes": "Notes"
+    "col_count": "#"
   },
 
   "section_2": {
-    "title": "Section 2 — Proof-of-fund",
-    "fr_agg_title": "FR aggregation check",
-    "fr_agg_caption": "FR amount = the figure printed on that Fund Report line (often a single cell summing several slips). Sum of slips = the actual total of the underlying proof-of-fund slips this audit attributes to the same FR line. The two should match; the Total row sums every aggregated FR line shown here and should reconcile with the corresponding channel section above (it does not include FR lines that are already 1-slip-per-row, since those have no aggregation to verify).",
+    "title": "Section 2 — Revenue Channel · grouped by destination bank account",
+    "cfp_topup_label": "CFP Top-up — non-revenue",
+    "cfp_topup_subtotal": "CFP Top-up subtotal",
+    "subtotal_label": "subtotal",
+    "receivables_label": "Receivables (not received today)",
+    "reconciliation_label": "Total inflow (table)",
+    "reconciliation_vs_slips": "vs Sum of slips uploaded",
     "col_doc": "Doc",
     "col_type": "Type",
     "col_amt": "Amt (RM)",
     "col_date": "Date✓",
     "col_uniq": "Uniq✓",
-    "col_acct": "Acct✓",
+    "col_acct": "Acct (read off slip)",
     "col_pos": "POS✓",
-    "col_cleared": "Cleared✓",
     "col_in_fr": "In FR",
-    "col_notes": "Notes",
-    "col_fr_line": "FR line",
-    "col_fr_amount": "FR amount",
-    "col_sum_slips": "Sum of slips",
-    "col_variance": "Variance",
-    "col_status": "Status"
+    "col_notes": "Notes"
   },
 
   "legend": {
     "date": "slip's printed date matches the audited business date (§6 r.4).",
     "uniq": "slip is not a duplicate (§6 r.5).",
-    "acct": "deposit landed in one of the six approved Maybank/AmBank accounts (§2, §6 r.6).",
+    "acct": "destination account read off the slip image, not inferred (§6 r.6).",
     "pos": "slip's amount and channel reconcile to the POS system totals (§6 r.7–8).",
-    "cleared": "credit confirmed in the bank-ledger Google Sheet for the audited date (T+1..T+3 for cheques) — §6 r.11. Blank when verification is deferred.",
     "in_fr": "✓ individual / ∑ aggregated / ✗ missing (§6 r.12)."
   },
 
   "section_3": {
-    "title": "Section 3 — Cash highlight",
-    "col_item": "Item",
-    "col_fr": "FR",
-    "col_computed": "Computed",
-    "col_var": "Var",
-    "computed_legend_title": "How each Computed value is derived",
-    "computed_legend": [
-      "<strong>Opening cash</strong> = closing cash carried forward from the previous business date's audit (no recompute today; pulled from the prior FR's closing cash).",
-      "<strong>Cash revenue (POS)</strong> = GreenPOS Cash-tender total for the day (system-generated, source of truth per §6 r.7).",
-      "<strong>CFP cash top-up</strong> = sum of CFP-report top-up entries whose payment mode is <em>cash</em> only. CFP top-ups paid via bank transfer / e-wallet are excluded (they are CFP Deposit, not cash). If today's only CFP top-ups were bank transfer, this is correctly <em>0</em>.",
-      "<strong>BuraqMart cash</strong> = Autocount POS Cash-tender total for the Buraqmart side of the station.",
-      "<strong>Safeguards (CDM) pick-up</strong> = sum of all Safeguards CDM cash-deposit slips dated for the audit day (cash physically removed from the till and deposited).",
-      "<strong>Closing cash</strong> = Opening + Cash revenue + CFP cash top-up + BuraqMart cash − Safeguards pick-up. Compared to the FR's printed closing cash; any difference appears in the Var column."
-    ]
+    "title": "Section 3 — Cash highlight & FR aggregation",
+    "opening": "Opening cash",
+    "collected": "Cash collected from all segments today",
+    "banked_in": "Cash already banked in (proven with deposit slips)",
+    "expected": "= Expected cash balance at site",
+    "fr_closing": "FR printed closing cash",
+    "variance_vs_expected": "Variance vs expected",
+    "fr_agg_title": "§3a — FR aggregation check (§6 r.12)",
+    "fr_agg_caption": "FR amount = the figure printed on that Fund Report line (often a single cell summing several slips). Sum of slips = the actual total of the underlying proof-of-fund slips this audit attributes to the same FR line. Each variance row is referenced from §6 by the inline FINDING badge.",
+    "col_fr_line": "FR line",
+    "col_fr_amount": "FR amount",
+    "col_sum_slips": "Sum of slips",
+    "col_variance": "Variance",
+    "col_status": "Status"
   },
 
   "section_4": {

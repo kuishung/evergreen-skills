@@ -1,62 +1,71 @@
-# Audit data — JSON contract
+# Audit data — JSON contract (schema_version: 2)
 
 The renderer (`../render/render-audit.py`) takes one JSON object and renders it via `audit.html.j2` using either `labels-en.json` or `labels-cn.json`. The LLM running `sale-audit` produces this JSON each run; the renderer is deterministic, so any two runs over the same JSON produce byte-identical PDFs.
 
-`sample-data.json` in this folder is a complete worked example matching the BL audit dated 2026-04-25.
+`sample-data.json` in this folder is a complete worked example matching the BL audit dated 2026-04-25, restructured for schema_version 2 (the §9 redesign that landed in `sale-audit` 0.16.0).
 
 ## Top-level fields
 
 | Field | Type | Notes |
 |---|---|---|
-| `schema_version` | int | Pin to `1` for now. Renderer reads but does not currently version-gate. |
+| `schema_version` | int | Pin to `2`. Bumped from `1` when the §9 redesign landed. |
 | `language` | `"en"` \| `"cn"` | Echoed into `<html lang="…">`; the `--lang` CLI flag overrides which label pack is loaded. |
 | `skill_version` | string | Filled at render time from `SKILL.md` frontmatter `version:` if absent. Footer reads this. |
-| `skill_updated` | string | Filled at render time from `SKILL.md` frontmatter `updated:` if absent. Reserved — not currently rendered (the footer dropped the `amended <date>` segment in v0.15.0). |
-| `bank_ledger_version` | string | Filled at render time from `../bank-ledger/SKILL.md` frontmatter `version:` if absent. Footer reads this so the report records which bank-ledger release produced today's clearance data. |
+| `skill_updated` | string | Filled at render time from `SKILL.md` frontmatter `updated:` if absent. Reserved — not currently rendered. |
+| `bank_ledger_version` | string | Filled at render time from `../bank-ledger/SKILL.md` frontmatter `version:` if absent. Footer reads this. |
 | `generated_at` | string `YYYY-MM-DD HH:MM` | Filled by `datetime.now()` if absent. Footer reads this. |
 | `station` | object | `code` (`"TK"`/`"BS"`/`"BL"`), `name_long`, `name_long_cn`. |
 | `business_date` | string `YYYY-MM-DD` | Date being audited. |
-| `meta` | object | `prepared_by`, `fund_report_status`, `bank_stmts_status`. |
+| `meta` | object | `prepared_by`, `fund_report_status`. (The `bank_stmts_status` field from schema v1 is gone — bank clearance moves to a separate skill.) |
 | `delivery` | object \| null | `{occurred: bool, summary: string}`. Yellow callout above Section 1 when `occurred=true`. |
-| `inflow` | object | `{total, revenue, cfp_deposit}`, all numeric. |
+| `inflow` | object | `{total, revenue, cfp_deposit}`, all numeric (RM). |
 | `revenue` | object | See **Revenue object** below. |
 | `cfp_deposit` | object | See **CFP Deposit object** below. |
-| `donut_slices` | array | See **Donut slices** below. |
-| `section_2` | object | See **Section 2 object** below. |
-| `section_3_cash` | object | See **Cash highlight** below. |
-| `section_4_fuel` | object | See **Fuel quantity** below. |
-| `section_4b_pos_tally` | array | One row per check; see below. |
+| `section_2` | object | Bank-grouped channel table. See below. |
+| `section_3_cash` | object | Single arithmetic flow + FR comparison. See below. |
+| `section_3_fr_aggregation` | object | FR-vs-slips reconciliation. See below. |
+| `section_4_fuel` | object | One row per fuel product. See below. |
+| `section_4b_pos_tally` | array | One row per POS-vs-FR check. See below. |
 | `section_5_checklist` | string | HTML allowed (`<strong>`); rendered as a paragraph. |
-| `section_6_findings` | array | One bullet per finding; see below. |
+| `section_6_findings` | array | One bullet per finding. Numbered Arabic 1, 2, 3, …. |
 
-## Revenue object
+## Revenue object (§1)
+
+Per §9.1 the segments table breaks Fuel into Petrol / Diesel and surfaces the BUDI95 vs Collected split for petrol. Every figure that used to live in explanatory paragraphs now sits in a cell.
 
 ```jsonc
 {
-  "total": 60447.93,                       // RM
+  "total": 48687.10,                       // sum of segments
+  "litres_total": "13,810.60",             // already-formatted string
+  "budi95_total": 23130.10,                // RM, sum of all budi95_rm
+  "collected_total": 25557.00,             // RM, sum of all collected_rm
   "segments": [
-    // One row per business line. iBing and Rental are ALWAYS separate
-    // rows — never combine them into "iBing / Rental".
-    // TK: Fuel, Buraqmart, Rental, iBing (four rows).
-    // BS / BL: Fuel, Buraqmart, Rental (three rows; no iBing row at all).
-    { "name": "Fuel",      "amount": 0.0, "share_pct": 0.0 },
-    { "name": "Buraqmart", "amount": 0.0, "share_pct": 0.0 },
-    { "name": "Rental",    "amount": 0.0, "share_pct": 0.0 },
-    { "name": "iBing",     "amount": 0.0, "share_pct": 0.0 }   // TK only
-  ],
-  "footer_note": "Free text below the segment table (italic).",
-  "channels": [
-    { "name": "Cash", "amount": 0.0, "slips_count": 21, "slips_text": "21",
-      "pct_revenue": 37.8, "notes": "..." },
-    ...
-  ],
-  "channels_total": { "amount": 0.0, "slips_count": 33, "pct_revenue": 100.0 }
+    // TK: Petrol, Diesel, Buraqmart, iBing, Lot Rental (five rows).
+    // BS / BL: Petrol, Diesel, Buraqmart, Lot Rental (no iBing row).
+    { "name": "Fuel — Petrol",
+      "litres": "10,948.96",               // string; null for non-fuel segments
+      "budi95_rm": 23130.10,               // RM; null if segment has no BUDI95 (Diesel, Buraqmart, ...)
+      "collected_rm": 19259.77,            // RM; non-BUDI95 portion (cash + card + voucher at pump)
+      "amount": 42389.87,                  // segment total (= budi95_rm + collected_rm where applicable)
+      "share_pct": 87.1 },
+    { "name": "Fuel — Diesel",
+      "litres": "2,861.64", "budi95_rm": null, "collected_rm": 6152.53,
+      "amount": 6152.53, "share_pct": 12.6 },
+    { "name": "Buraqmart",
+      "litres": null, "budi95_rm": null, "collected_rm": 144.70,
+      "amount": 144.70, "share_pct": 0.3 },
+    { "name": "Lot Rental",
+      "litres": null, "budi95_rm": null, "collected_rm": 0.00,
+      "amount": 0.00, "share_pct": 0.0 }
+  ]
 }
 ```
 
-`slips_text` is for the channel-totals "# slips" cell; useful when the count itself isn't a plain integer (`"—"` for BUDI95).
+Where a segment has no value for a given column (Diesel has no BUDI95; Buraqmart has no litres), set the field to `null` — the template renders it as `—`.
 
-## CFP Deposit object
+## CFP Deposit object (§1)
+
+Unchanged from schema v1.
 
 ```jsonc
 {
@@ -70,95 +79,161 @@ The renderer (`../render/render-audit.py`) takes one JSON object and renders it 
 }
 ```
 
-## Donut slices
+## Section 2 — Revenue Channel table (§9.2)
 
-Order matters — slices render clockwise in array order. Sum of `pct` should equal 100.0. The four standard slice colour vars are:
-
-| Channel       | `color_var`         |
-|---------------|---------------------|
-| Cash          | `--slice-cash`      |
-| Merchant      | `--slice-merchant`  |
-| CFP voucher   | `--slice-cfp`       |
-| BUDI95        | `--slice-budi`      |
-
-```jsonc
-"donut_slices": [
-  { "label": "Cash",        "color_var": "--slice-cash",     "pct": 37.8 },
-  { "label": "Merchant",    "color_var": "--slice-merchant", "pct":  1.7 },
-  { "label": "CFP voucher", "color_var": "--slice-cfp",      "pct": 22.3 },
-  { "label": "BUDI95",      "color_var": "--slice-budi",     "pct": 38.3 }
-]
-```
-
-## Section 2 object
+Per §9.2, the flat per-channel table is replaced with a bank-grouped table. CFP Top-up first (only when present), then revenue grouped by destination bank account, with per-bank subtotals. Each slip row shows Doc / Type / Amt / Date / Uniq / Acct / POS / In FR / Notes — no Cleared column.
 
 ```jsonc
 {
-  "subtitle": "25 slips · all individual, no aggregation in FR slip rows",
-  "deferred_note": "§6.11 deferred for ...",   // null/omit if not deferred
-  "slips": [
+  "subtitle": "26 slips · grouped by destination bank account",
+
+  // CFP Top-up block (non-revenue) — render only when present. If today
+  // has no CFP top-up at all, omit the entire `cfp_topup` object.
+  "cfp_topup": {
+    "total": 967.50,
+    "channels": [
+      { "name": "Instant Transfer (CFP top-up)",
+        "slips": [ /* slip objects, see below */ ] }
+    ]
+  },
+
+  // Banks block — one entry per approved Maybank/AmBank account that
+  // received money today (§2). Order: AMB first, MBB second, by last-4.
+  "banks": [
     {
-      "doc": "01-5351",
-      "type": "Safeguard CDM",
-      "amount": 6270.00,
-      "date_ok": true,                          // bool -> ✓ / ✗
-      "uniq_ok": true,                          // bool -> ✓ / ✗
-      "acct": "✓ AMB(G4S)",                     // free text (template doesn't tickify)
-      "pos_ok": true,                           // bool, or null -> "n/a"
-      "cleared": {
-        "kind": "verified" | "deferred" | "missing",
-        "text": "✓" | "partial G4S" | "✗ no match" | "defer T+1"
-      },
-      "in_fr": "ok" | "agg" | "missing",        // ✓ / ∑ / ✗
-      "notes": "Free text. <strong>HTML</strong> tags allowed."
+      "code": "AMB-8135",
+      "label": "AmBank 8881058618135 (G4S clearing)",
+      "subtotal": 22344.00,
+      "channels": [
+        {
+          "name": "Safeguards",                 // see §9.2 channel taxonomy
+          "subtotal": 22344.00,                 // optional; rendered next to channel name in muted text
+          "slips": [ /* slip objects */ ]
+        }
+      ]
     }
   ],
-  "fr_aggregation": [
-    { "line": "Safeguards (FR aggregate)",
-      "fr_amount": 22344.00, "sum_slips": 22344.00,
-      "variance": 0.00, "status": "Clean", "is_variance": false },
-    { "line": "Cash in Today (excl Opening)",
-      "fr_amount": 11237.94, "sum_slips": 11586.61,
-      "variance": 348.67, "status": "Variance", "is_variance": true }
-  ],
-  "fr_aggregation_total": {
-    "fr_amount": 33581.94,
-    "sum_slips": 33930.61,
-    "variance": 348.67,
-    "status": "Variance",
-    "is_variance": true
-  }
+
+  // Receivables block (BUDI95 IPTB, etc.) — optional, render only when
+  // there are receivables to show. NOT a bank-credited inflow today.
+  "receivables": null,
+
+  // Reconciliation row at the foot of the table — total inflow captured
+  // in this table vs sum of slips uploaded today.
+  "reconciliation": {
+    "total_inflow": 24909.30,
+    "sum_slips":    24909.30,
+    "passed": true,
+    "result": "✓ Pass — table captures every slip uploaded today",
+    "finding_n": null                          // set to int when passed:false
+  },
+
+  // Optional explanatory note rendered below the legend, e.g. for the
+  // §9.2 Safeguards classification rule when the call was non-trivial.
+  "safeguards_rule_note": "<strong>Safeguards classification:</strong> ..."
 }
 ```
 
-Set `fr_aggregation: []` if no aggregated FR lines exist; the section is omitted in that case.
+### Channel taxonomy (per §9.2)
 
-`fr_aggregation_total` is **required** whenever `fr_aggregation` has at least one row. It is the sum down each numeric column over every row in `fr_aggregation` — the renderer does not auto-compute it (rounding is the LLM's responsibility). `status` is the human verdict on the totals (`"Clean"` / `"Variance"` / etc.); `is_variance: true` paints the total row red. Omit (or set `null`) if `fr_aggregation` is empty.
+Allowed channel names under each bank, in order of typical appearance:
 
-## Cash highlight (Section 3)
+- `We Direct Bank-in`
+- `Instant Transfer (Non CFP)`
+- `Instant Transfer (Lot Rental)`
+- `Merchant Settlement`
+- `Cheque`
+- `BUDI95`
+- `Safeguards`
+
+Special rule for Safeguards (§9.2): read the receipt image. If our company bank-account number is **printed on the slip**, classify the row as `We Direct Bank-in` (cash credits straight to that account). Only when our account is **not** on the slip does the row stay as `Safeguards` (G4S central clearing).
+
+### Slip object
+
+```jsonc
+{
+  "doc":     "12-2617M",                     // freeform doc/receipt ID
+  "type":    "TTCFP (CFP top-up)",           // free text — slip-content type
+  "amount":  967.50,                         // RM
+  "date_ok": true,                           // bool (or null in receivables); → ✓ / ✗ tick
+  "uniq_ok": true,                           // bool; → ✓ / ✗ tick
+  "acct":    "MBB 510161015366",             // free text, account READ off slip image (§6 r.6)
+  "pos_ok":  true,                           // bool, or null → "n/a"
+  "in_fr":   "ok" | "agg" | "missing",       // ✓ / ∑ / ✗ per §6 r.12
+  "notes":   "Free text. <strong>HTML</strong> allowed (rendered raw)."
+}
+```
+
+The Cleared column from schema v1 is gone. Bank-clearance verification (Web App ping, CSV fallback, per-slip clearance lookup) moves to a separate skill (working name: bank-clearance-audit).
+
+## Section 3 — Cash highlight (§9.5)
+
+Per §9.5, drop the FR / Computed / Var four-column layout. Replace with a single arithmetic flow plus one comparison line below it.
+
+```jsonc
+{
+  "opening":    217.24,                      // RM, brought forward from prior business date
+  "collected":  33858.07,                    // RM, sum of cash collected from all segments today
+  "collected_breakdown": "GreenPOS Cash 33,713.37 + Buraqmart cash 144.70 + CFP cash top-up 0.00",
+                                             // optional one-line string, rendered as a muted sub-row
+                                             // under "collected" — folds the legend into the table
+  "banked_in":  22344.00,                    // RM, sum of CDM / Safeguards cash-deposit slips dated today
+  "expected":   11731.31,                    // RM, opening + collected - banked_in (audit-computed)
+
+  // Single comparison line below the arithmetic table (§9.5 option B):
+  // FR's printed closing cash vs the audit's expected balance.
+  "fr_check": {
+    "fr_closing": 11455.18,                  // RM, the FR's printed closing-cash figure
+    "variance":     -276.13,                 // RM = fr_closing - expected (signed)
+    "passed":       false,
+    "result":       "✗ Variance",
+    "finding_n":    4                        // int; matches f.n in section_6_findings
+  },
+
+  "footer_note": "Free text under the comparison line; HTML allowed."
+}
+```
+
+If `passed: false` and `finding_n` is missing, the renderer emits a visible `[finding number missing]` placeholder — failing loud beats failing silent.
+
+## Section 3a — FR aggregation (§6 r.12 reconciliation)
+
+Was old `section_2.fr_aggregation`; promoted to its own block alongside §3 since §2 no longer has the FR aggregation table inline.
 
 ```jsonc
 {
   "rows": [
-    { "item": "Opening cash",  "fr": 217.24, "computed": 217.24,
-      "var": null, "is_variance": false, "is_total": false },
-    ...
-    { "item": "Closing cash",  "fr": 11455.18, "computed": 11586.61,
-      "var": -131.43, "is_variance": true,  "is_total": true }
+    { "line": "Safeguards (FR aggregate)",
+      "fr_amount": 22344.00, "sum_slips": 22344.00,
+      "variance": 0.00, "status": "Clean",
+      "is_variance": false,
+      "finding_n": null },
+    { "line": "Cash in Today (excl Opening)",
+      "fr_amount": 11237.94, "sum_slips": 11586.61,
+      "variance": 348.67, "status": "Variance",
+      "is_variance": true,
+      "finding_n": 8 }
   ],
-  "footer_note": "Free-text explanation paragraph below the table."
+  "total": {
+    "fr_amount": 36147.24, "sum_slips": 36495.91,
+    "variance":    348.67, "status": "Variance",
+    "is_variance": true,
+    "finding_n":   8
+  }
 }
 ```
 
-`var: null` renders as `—`. `is_variance: true` paints the row red. `is_total: true` bolds + adds a top border.
+Set the whole object to `null` (or omit) when there are no aggregated FR lines. Per §9.3, every row with `is_variance: true` MUST have a non-null `finding_n` referencing a corresponding §6 entry that uses the direction-aware Case A / Case B finding-text template.
 
-## Fuel quantity (Section 4)
+## Section 4 — Fuel quantity
+
+Unchanged from schema v1.
 
 ```jsonc
 {
   "rows": [
     { "product": "RON95 (Petrol)",
-      "open_l": "17,176",                       // strings — already-formatted
+      "open_l": "17,176",                       // strings, already formatted
       "deliv_l": "DELIV 16,500",
       "sales_l": "10,948.96",
       "close_l": "22,525",
@@ -168,40 +243,47 @@ Set `fr_aggregation: []` if no aggregated FR lines exist; the section is omitted
 }
 ```
 
-The L-fields are rendered verbatim (string), so you can include qualifiers like `"DELIV 16,500"` or asterisks.
+## Section 4b — POS tally
 
-## POS tally (Section 4b)
+Per §9.6, every `passed: false` row gains a mandatory `finding_n` (matches `f.n` in `section_6_findings`). The template stamps `see FINDING <n>` after the result text on red rows.
 
 ```jsonc
 [
-  { "check": "GreenPOS fuel total", "pos": 48542.40, "fr": 48525.00,
-    "result": "✗ −17.40", "passed": false },
-  { "check": "CFP voucher vs GreenPOS", "pos": 13489.96, "fr": 13489.96,
-    "result": "✓ Verified", "passed": true }
+  { "check": "GreenPOS fuel total",
+    "pos": 48542.40, "fr": 48525.00,
+    "result": "✗ −17.40",
+    "passed": false,
+    "finding_n": 6 },
+  { "check": "CFP voucher vs GreenPOS",
+    "pos": 13489.96, "fr": 13489.96,
+    "result": "✓ Verified",
+    "passed": true,
+    "finding_n": null }
 ]
 ```
 
-`passed: false` paints the row red and the result text gets the `tickbox.x` style.
+## Section 6 — Findings
 
-## Findings (Section 6)
+Per §9.4, rendered as Arabic numerals (FINDING 1, 2, 3, ...). The `roman` Jinja filter is no longer wired up. Cross-references elsewhere in the report (`see FINDING 4`) cite the same integer.
 
 ```jsonc
 [
   { "n": 1,
     "title": "Short bold lead.",
-    "body": "Body sentence with the analysis.",
+    "body":  "Body sentence with the analysis.",
     "action": "Concrete next step." }
 ]
 ```
 
-`n` is the integer ordinal (1, 2, 3, …); the renderer formats it as an upper-case Roman numeral via the `roman` Jinja filter (FINDING I, II, III). Other rows in the report that need to point at a finding must cite the Roman number explicitly — e.g., `notes: "see FINDING IV"` — so back-office staff can cross-reference without hunting. The LLM owns the ordering (most material first per `SKILL.md` §7).
+The LLM owns the ordering (most material first per `SKILL.md` §7). Per §9.3 / §9.5 / §9.6, every red-coloured row in §2 / §3 / §3a / §4b that references a finding number expects that integer to exist here.
 
 ## Renderer responsibilities
 
 The renderer:
 
 - Loads `audit.html.j2`, `labels-{en|cn}.json`, the data JSON.
-- Adds `skill_version` / `skill_updated` from `SKILL.md` frontmatter and `generated_at` from `datetime.now()` if absent (so the LLM doesn't have to compute them).
-- Auto-escapes by default; fields documented above as accepting HTML (`section_5_checklist`, `slip.notes`) bypass via the template's `|safe` filter and are the LLM's responsibility to keep clean.
+- Reads `templates/audit.css` and inlines it into the rendered HTML as a `<style>` block (the HTML is fully self-contained — required for the production two-step flow where `anthropic-skills:pdf` rasterises the scratch HTML at a different working directory; see SKILL.md §7.1).
+- Adds `skill_version` / `skill_updated` from `SKILL.md` frontmatter, `bank_ledger_version` from sibling `../bank-ledger/SKILL.md`, and `generated_at` from `datetime.now()` if absent.
+- Auto-escapes by default; fields documented above as accepting HTML (`section_5_checklist`, `slip.notes`, `cfp_deposit.subtitle`, `safeguards_rule_note`, `section_3_cash.footer_note`) bypass via the template's `|safe` filter and are the LLM's responsibility to keep clean.
 - Writes `.html` (no extra deps) or `.pdf` (requires `weasyprint`).
-- Never reads files other than the three above and the sibling `audit.css`.
+- Never reads files other than the four above (`audit.html.j2`, `labels-{en,cn}.json`, the data JSON, `audit.css`).
