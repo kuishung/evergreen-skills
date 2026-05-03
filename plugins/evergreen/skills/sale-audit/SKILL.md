@@ -1,8 +1,8 @@
 ---
 name: sale-audit
 description: Use this skill whenever the user (Evergreen back-office / management) wants to audit, verify, or check the daily sale submission of a petrol station — TK (Tg. Kapor), BS (Berkat Setia), or BL (Bubul Lama). Triggers include phrases like "audit TK", "audit sale", "check BS sale", "verify fund report", "run daily audit", "daily sale audit for <date>", or any request to reconcile a station's Fund Report against its supporting documents and produce an audit PDF.
-version: 0.20.0
-updated: 2026-05-03 22:00
+version: 0.21.0
+updated: 2026-05-03 22:30
 ---
 
 # Sale Audit — Evergreen Petrol Stations

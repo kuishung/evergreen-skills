@@ -53,6 +53,18 @@ function Read-WithDefault($label, $default) {
     return $v
 }
 
+# Same as Read-WithDefault but allows blank input even when no default
+# is provided. Used for optional config values (e.g. the WhatsApp
+# paths — blank = disable WhatsApp without disabling the audit).
+function Read-WithDefaultAllowBlank($label, $default) {
+    if ($default) {
+        $v = Read-Host "$label [$default]"
+        if ([string]::IsNullOrWhiteSpace($v)) { return $default } else { return $v }
+    }
+    $v = Read-Host "$label (blank = skip)"
+    if ([string]::IsNullOrWhiteSpace($v)) { return '' } else { return $v }
+}
+
 Write-Host ""
 Write-Host "Tell me where things live on this machine. Press Enter to accept" -ForegroundColor Cyan
 Write-Host "the default if it's already correct." -ForegroundColor Cyan
@@ -68,6 +80,16 @@ $RunTime         = Read-WithDefault 'Daily run time (HH:mm 24h)' '06:30'
 # are gone. The wrapper no longer pings the bank-ledger before the
 # audit, no longer polls for "yesterday's credits ingested", and no
 # longer passes a CLEARANCE block in the claude prompt.
+
+# WhatsApp notifications (whatsapp-send skill, chained from sale-audit
+# §8 step 6). All three are optional — leave blank to disable WhatsApp
+# entirely. The audit still runs and writes PDFs; only the chained
+# notification step is skipped when either path is empty.
+Write-Host ""
+Write-Host "WhatsApp notifications (optional — blank Enter disables)" -ForegroundColor Cyan
+$TwilioCredsPath     = Read-WithDefaultAllowBlank 'Twilio credentials JSON path'   "$env:USERPROFILE\.evergreen\twilio\credentials.json"
+$RecipientsPath      = Read-WithDefaultAllowBlank 'WhatsApp recipients JSON path'  ''
+$AuditDriveFolderUrl = Read-WithDefaultAllowBlank 'Audit Drive folder URL (paste empty to use local path)' ''
 
 # Sanity-check the run time
 if ($RunTime -notmatch '^\d{2}:\d{2}$') {
@@ -105,10 +127,13 @@ $configPath  = Join-Path $installRoot 'config.json'
 # means re-running this installer with new values is the only place
 # that ever changes them.
 @{
-    DailyReportRoot = $DailyReportRoot
-    AuditOutputRoot = $AuditOutputRoot
-    AuditOffsetDays = -1
-    Stations        = @('TK', 'BS', 'BL')
+    DailyReportRoot     = $DailyReportRoot
+    AuditOutputRoot     = $AuditOutputRoot
+    AuditOffsetDays     = -1
+    Stations            = @('TK', 'BS', 'BL')
+    TwilioCredsPath     = $TwilioCredsPath
+    RecipientsPath      = $RecipientsPath
+    AuditDriveFolderUrl = $AuditDriveFolderUrl
 } | ConvertTo-Json | Set-Content -Path $configPath -Encoding UTF8
 
 Write-Host "[OK] Config written: $configPath" -ForegroundColor DarkGray
@@ -145,6 +170,31 @@ Set-Location -Path $Cfg.AuditOutputRoot
 $env:FORCE_AUTOUPDATE_PLUGINS = '1'
 
 $stationsCsv = $Cfg.Stations -join ', '
+
+# WhatsApp config block — only injected into the prompt when BOTH the
+# Twilio credentials path AND the WhatsApp recipients path are set
+# AND both files actually exist on disk. Either missing → WhatsApp is
+# silently skipped this run; the audit still produces PDFs.
+$whatsappBlock = ''
+$twilioReady     = $Cfg.TwilioCredsPath -and (Test-Path $Cfg.TwilioCredsPath)
+$recipientsReady = $Cfg.RecipientsPath  -and (Test-Path $Cfg.RecipientsPath)
+if ($twilioReady -and $recipientsReady) {
+    $driveLine = if ($Cfg.AuditDriveFolderUrl -and $Cfg.AuditDriveFolderUrl.Trim().Length -gt 0) {
+        "- Audit Drive folder URL: $($Cfg.AuditDriveFolderUrl)"
+    } else {
+        "- Audit Drive folder URL: (not set — WhatsApp message will use local path)"
+    }
+    $whatsappBlock = @"
+
+WHATSAPP NOTIFICATIONS (whatsapp-send skill, chained per sale-audit ``§8`` step 6):
+- Twilio credentials path: $($Cfg.TwilioCredsPath)
+- WhatsApp recipients path: $($Cfg.RecipientsPath)
+$driveLine
+
+After both PDFs are written for each station, invoke the whatsapp-send skill (per sale-audit ``§8`` step 6) — best-effort, never blocks the audit. If the send fails for any reason, log the failure and continue; do NOT raise it as a §6 audit finding (it's an operational issue, not an audit issue).
+"@
+}
+
 # IMPORTANT prompt ordering: action first, context second. claude in
 # -p mode is single-turn, and if the first paragraph reads like a
 # task ("Reference setup -- save each as a memory..."), claude
@@ -157,7 +207,7 @@ TASK: Run the daily sale audit for business date $auditDate across stations $sta
 USE THESE REFERENCE VALUES for this run (override anything in older memory):
 - Daily-report root: $($Cfg.DailyReportRoot)
 - Audit-output root: $($Cfg.AuditOutputRoot)
-
+$whatsappBlock
 CLEARANCE: Out of scope for sale-audit v0.18.0+. Bank-clearance verification has moved to a separate skill; per ``§6`` rule 11, the audit reports inflow categorisation only and does not attempt to confirm slip-level bank credits.
 
 EXECUTION: Do not stop to ask questions. If any check fails, log the reason and continue to the next check / next station so the run still produces what it can. Exit non-zero only if no PDFs at all could be rendered.
