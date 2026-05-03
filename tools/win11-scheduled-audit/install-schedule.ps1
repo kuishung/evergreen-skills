@@ -60,10 +60,14 @@ Write-Host ""
 
 $DailyReportRoot = Read-WithDefault 'Daily-report root path' 'C:\Users\KS\DATA\Evergreen\DailyReports'
 $AuditOutputRoot = Read-WithDefault 'Audit-output root path' 'C:\Users\KS\DATA\Evergreen\AuditOutput'
-$LocalCsvPath    = Read-WithDefault 'Bank-ledger local CSV path (for fallback; can be empty)' ''
-$WebAppUrl       = Read-WithDefault 'Bank-ledger Web App URL'   ''
-$WebAppToken     = Read-WithDefault 'Bank-ledger Web App token' ''
 $RunTime         = Read-WithDefault 'Daily run time (HH:mm 24h)' '06:30'
+
+# Bank-clearance verification has moved to a separate skill (per
+# sale-audit v0.18.0 / §9 redesign), so the Web App URL / token /
+# local-CSV-path prompts that earlier installer versions asked for
+# are gone. The wrapper no longer pings the bank-ledger before the
+# audit, no longer polls for "yesterday's credits ingested", and no
+# longer passes a CLEARANCE block in the claude prompt.
 
 # Sanity-check the run time
 if ($RunTime -notmatch '^\d{2}:\d{2}$') {
@@ -100,24 +104,11 @@ $configPath  = Join-Path $installRoot 'config.json'
 # Persist the config as JSON so the wrapper reads it at run time -
 # means re-running this installer with new values is the only place
 # that ever changes them.
-#
-# WaitForBankLedger / WaitMaxRetries / WaitMinutesBetweenRetries
-# control the "don't run until yesterday's credits are ingested"
-# behaviour. Default is wait up to 4 retries x 30 min = 2 hours
-# from the scheduled fire time before giving up and running the
-# audit anyway with section 6.11 deferred. Set WaitForBankLedger to
-# $false (here, then re-run the installer) to disable the wait.
 @{
-    DailyReportRoot           = $DailyReportRoot
-    AuditOutputRoot           = $AuditOutputRoot
-    LocalCsvPath              = $LocalCsvPath
-    WebAppUrl                 = $WebAppUrl
-    WebAppToken               = $WebAppToken
-    AuditOffsetDays           = -1
-    Stations                  = @('TK', 'BS', 'BL')
-    WaitForBankLedger         = $true
-    WaitMaxRetries            = 4
-    WaitMinutesBetweenRetries = 30
+    DailyReportRoot = $DailyReportRoot
+    AuditOutputRoot = $AuditOutputRoot
+    AuditOffsetDays = -1
+    Stations        = @('TK', 'BS', 'BL')
 } | ConvertTo-Json | Set-Content -Path $configPath -Encoding UTF8
 
 Write-Host "[OK] Config written: $configPath" -ForegroundColor DarkGray
@@ -166,11 +157,8 @@ TASK: Run the daily sale audit for business date $auditDate across stations $sta
 USE THESE REFERENCE VALUES for this run (override anything in older memory):
 - Daily-report root: $($Cfg.DailyReportRoot)
 - Audit-output root: $($Cfg.AuditOutputRoot)
-- Bank-ledger Web App URL: $($Cfg.WebAppUrl)
-- Bank-ledger Web App token: $($Cfg.WebAppToken)
-- Bank-ledger local CSV path: $($Cfg.LocalCsvPath)
 
-CLEARANCE: Per `§6` rule 11, try the Bank-ledger Web App first. If the Web App fails (network unreachable, token mismatch, 403, etc.), fall back to reading the local CSV at the path above. Only defer `§6.11` if neither source is available.
+CLEARANCE: Out of scope for sale-audit v0.18.0+. Bank-clearance verification has moved to a separate skill; per ``§6`` rule 11, the audit reports inflow categorisation only and does not attempt to confirm slip-level bank credits.
 
 EXECUTION: Do not stop to ask questions. If any check fails, log the reason and continue to the next check / next station so the run still produces what it can. Exit non-zero only if no PDFs at all could be rendered.
 "@
@@ -179,47 +167,12 @@ $banner = "=== Evergreen Sale Audit === $((Get-Date).ToString('yyyy-MM-dd HH:mm:
 Add-Content -Path $logFile -Value $banner
 Write-Host $banner
 
-# Wait for the bank-ledger to have yesterday's credits before running.
-# AmBank emails the daily statement at variable times overnight; if
-# the audit fires before the email arrives, every slip's clearance
-# is "deferred" and the report is less useful. Polling here keeps
-# the audit single-shot from Task Scheduler's view but lets the
-# wrapper retry up to N times before giving up.
-function Test-BankLedgerReady {
-    param([string]$Url, [string]$Token, [string]$Date)
-    if ([string]::IsNullOrWhiteSpace($Url) -or [string]::IsNullOrWhiteSpace($Token)) { return $false }
-    try {
-        $u = "$Url`?token=$Token&value_date=$Date&direction=CR"
-        $resp = Invoke-RestMethod -Uri $u -TimeoutSec 30 -UseBasicParsing
-        if ($resp.ok -and $resp.total_count -gt 0) { return $true }
-        return $false
-    } catch {
-        return $false
-    }
-}
-
-if ($Cfg.WaitForBankLedger) {
-    $maxRetries  = [int]$Cfg.WaitMaxRetries
-    $waitMinutes = [int]$Cfg.WaitMinutesBetweenRetries
-    $attempt     = 0
-    while ($true) {
-        if (Test-BankLedgerReady -Url $Cfg.WebAppUrl -Token $Cfg.WebAppToken -Date $auditDate) {
-            "Bank-ledger ready: $auditDate has credits ingested. Proceeding to audit." |
-                Tee-Object -FilePath $logFile -Append
-            break
-        }
-        if ($attempt -ge $maxRetries) {
-            "Bank-ledger NOT ready after $attempt retries (~$($attempt * $waitMinutes) min). Running audit anyway; section 6.11 will defer." |
-                Tee-Object -FilePath $logFile -Append
-            break
-        }
-        $attempt++
-        $next = (Get-Date).AddMinutes($waitMinutes).ToString('HH:mm:ss')
-        "Bank-ledger does not yet have $auditDate credits. Sleeping $waitMinutes min, retry $attempt/$maxRetries at $next." |
-            Tee-Object -FilePath $logFile -Append
-        Start-Sleep -Seconds ($waitMinutes * 60)
-    }
-}
+# (sale-audit v0.18.0+) The previous WaitForBankLedger / Test-BankLedgerReady
+# polling loop is gone — bank-clearance verification has moved to a
+# separate skill, so the audit no longer has any reason to wait for
+# yesterday's credits to land in the bank-ledger before running. The
+# Task Scheduler trigger fires once at the configured time and the
+# audit runs immediately.
 
 # --dangerously-skip-permissions is the documented opt-in for
 # unattended runs: there's no human at 06:30 to answer prompts, and

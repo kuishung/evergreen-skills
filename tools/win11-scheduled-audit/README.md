@@ -10,11 +10,11 @@ Open PowerShell on the server (the regular one — admin not required) and paste
 iwr https://raw.githubusercontent.com/kuishung/evergreen-skills/main/tools/win11-scheduled-audit/install-schedule.ps1 -UseBasicParsing | iex
 ```
 
-The installer asks for **6 things** (folders, Web App URL + token, run time), writes a wrapper script + config to `%ProgramData%\Evergreen\sale-audit\`, and registers a Task Scheduler entry. Total time ~2 minutes.
+The installer asks for **3 things** (daily-report root, audit-output root, run time), writes a wrapper script + config to `%ProgramData%\Evergreen\sale-audit\`, and registers a Task Scheduler entry. Total time ~1 minute.
 
-It also offers to run a test immediately so you can confirm the audit works end-to-end before tomorrow morning's 06:30 fires for real.
+It also offers to run a test immediately so you can confirm the audit works end-to-end before tomorrow morning's run fires for real.
 
-The 06:30 default is deliberate: the bank-ledger Apps Script trigger fires at 06:00, ingests the overnight AmBank statement emails, and refreshes the local-sync CSV/XLSX exports. The 30-minute gap leaves Google Drive Desktop time to sync those files down before the audit reads them.
+> **Bank-clearance verification has moved to a separate skill** as of `sale-audit` v0.18.0. The installer no longer asks for the bank-ledger Web App URL / token / local CSV path, the wrapper no longer waits for the AmBank statement to be ingested before running, and the audit no longer reports per-slip clearance — see SKILL.md §6 rule 11. The 06:30 default is now arbitrary; pick whatever time makes sense for your morning routine.
 
 ## Pre-flight (do these once before running the installer)
 
@@ -33,7 +33,7 @@ The 06:30 default is deliberate: the bank-ledger Apps Script trigger fires at 06
    /plugin marketplace add kuishung/evergreen-skills
    /plugin install evergreen@evergreen
    ```
-   Verify with `/plugin` — should show `evergreen` at `0.16.0` or higher.
+   Verify with `/plugin` — should show `evergreen` at `0.23.0` or higher.
 4. Quit the interactive session (`Ctrl+C` or `/exit`).
 
 Now run the **Quick install** line above.
@@ -59,21 +59,13 @@ Now run the **Quick install** line above.
 | `run-sale-audit.ps1` | Older standalone wrapper — kept for compatibility. The installer writes its own copy under `%ProgramData%\Evergreen\sale-audit\` from a config-driven template, so you don't normally use this one directly. |
 | `Evergreen-Sale-Audit-Daily.xml` | Task Scheduler import for the manual / GUI path. The installer registers via `schtasks.exe` instead, which is faster and skips the XML editing. Keep around if you prefer Task Scheduler GUI. |
 
-## Behaviour: "wait for the bank-ledger before auditing"
-
-When 06:30 hits, the wrapper first **pings the bank-ledger Web App** to check whether yesterday's credits have been ingested. If yes — runs the audit immediately. If no — sleeps 30 min, retries up to 4 times, then gives up and runs the audit anyway (with `§6.11` deferred for that day).
-
-This protects against the AmBank email arriving late. If the bank statement lands at, say, 07:15, the wrapper that fired at 06:30 catches it on its second retry at 07:00 and the audit runs cleanly.
-
-Maximum delay from scheduled fire to audit start: `WaitMaxRetries × WaitMinutesBetweenRetries` = 4 × 30 min = 2 hours by default. Edit `%ProgramData%\Evergreen\sale-audit\config.json` to change those values, or set `WaitForBankLedger: false` to disable the wait entirely and run immediately every time.
-
 ## What this gives you
 
-- Runs every morning at 06:30 (configurable) under your Windows account, auditing yesterday's business date.
-- Reaches `script.google.com` directly — `§6.11` clearance verifies live every night, no deferred slips.
+- Runs every morning at the configured time (06:30 default) under your Windows account, auditing yesterday's business date.
 - Can `pip install` whatever the renderer wants — no sandbox limits.
-- Reads `My Drive/...` for the bank-ledger CSV fallback if you've set that up.
 - Logs each run to `<AuditOutputRoot>\_logs\audit-<timestamp>.log` so failures are debuggable.
+
+(Versions of this README before sale-audit v0.18.0 documented a "wait for the bank-ledger before auditing" polling loop. That logic is gone — bank-clearance verification has moved to a separate skill, so the wrapper just fires once at the configured time and runs immediately.)
 
 ## Cowork still has a role
 

@@ -30,9 +30,6 @@ $ErrorActionPreference = 'Stop'
 $Config = @{
     DailyReportRoot   = 'C:\Users\KS\DATA\Evergreen\DailyReports'
     AuditOutputRoot   = 'C:\Users\KS\DATA\Evergreen\AuditOutput'
-    LocalCsvPath      = 'C:\Users\KS\My Drive\Evergreen\BankLedger\bank-ledger.csv'
-    WebAppUrl         = 'https://script.google.com/macros/s/PASTE-YOUR-WEB-APP-URL-HERE/exec'
-    WebAppToken       = 'PASTE-YOUR-WEB-APP-TOKEN-HERE'
 
     # whatsapp-send credentials file (local-only, NOT in the repo). Leave empty
     # to disable WhatsApp notifications — the audit still runs and writes PDFs.
@@ -111,11 +108,8 @@ $prompt = @"
 Reference setup — save each as a ``reference`` memory if not already saved, and use these values in this run regardless of any older memory:
 - Daily-report root: $($Config.DailyReportRoot)
 - Audit-output root: $($Config.AuditOutputRoot)
-- Bank-ledger Web App URL: $($Config.WebAppUrl)
-- Bank-ledger Web App token: $($Config.WebAppToken)
-- Bank-ledger local CSV path: $($Config.LocalCsvPath)
 $whatsappBlock
-Run the sale-audit skill for business date $auditDate across stations $stationsCsv. Render two PDFs per station (EN and CH) via the deterministic renderer in the skill's templates/ folder. Save them under <audit-output-root>/<YYYY>/<YYYY-MM>/<YYYY-MM-DD>/. Per §6 rule 11, try the Web App first; on any failure fall back to the local CSV. After both PDFs are written for each station, invoke the whatsapp-send skill per §8 step 6 of sale-audit — best-effort, never blocks the audit. Do not stop to ask questions — fail the run and log the reason instead.
+Run the sale-audit skill for business date $auditDate across stations $stationsCsv. Render two PDFs per station (EN and CH) via the deterministic renderer in the skill's templates/ folder. Save them under <audit-output-root>/<YYYY>/<YYYY-MM>/<YYYY-MM-DD>/. Bank-clearance verification is OUT OF SCOPE in v0.18.0+ (per ``§6`` rule 11) — the audit reports inflow categorisation only. After both PDFs are written for each station, invoke the whatsapp-send skill per ``§8`` step 6 of sale-audit — best-effort, never blocks the audit. Do not stop to ask questions — fail the run and log the reason instead.
 "@
 
 # Optional model pin

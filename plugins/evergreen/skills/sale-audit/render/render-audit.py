@@ -131,12 +131,11 @@ def main():
     data.setdefault("skill_version", args.skill_version or fm_version or "unknown")
     data.setdefault("skill_updated", args.skill_updated or fm_updated or "unknown")
 
-    # Read the sibling bank-ledger SKILL.md so the footer can stamp the
-    # bank-ledger version that produced today's clearance data. The plugin
-    # layout is .../plugins/evergreen/skills/{sale-audit,bank-ledger}/SKILL.md
-    bank_ledger_md = (here.parent.parent / "bank-ledger" / "SKILL.md").resolve()
-    bl_version, _bl_updated = read_skill_frontmatter(bank_ledger_md)
-    data.setdefault("bank_ledger_version", bl_version or "unknown")
+    # Bank-clearance verification has moved out of sale-audit into a
+    # separate skill (per §9 redesign); the report no longer stamps the
+    # bank-ledger release version in its footer. The previous read from
+    # ../bank-ledger/SKILL.md is intentionally gone — sale-audit no
+    # longer requires the bank-ledger skill to be installed at all.
 
     data.setdefault("generated_at", datetime.now().strftime("%Y-%m-%d %H:%M"))
     data.setdefault("language", args.lang)

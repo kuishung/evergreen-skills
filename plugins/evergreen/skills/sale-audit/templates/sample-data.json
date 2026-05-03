@@ -1,9 +1,9 @@
 {
   "schema_version": 2,
   "language": "en",
-  "skill_version": "0.16.0",
-  "skill_updated": "2026-05-03 20:30",
-  "generated_at": "2026-05-03 20:30",
+  "skill_version": "0.18.0",
+  "skill_updated": "2026-05-03 21:00",
+  "generated_at": "2026-05-03 21:00",
 
   "station": {
     "code": "BL",

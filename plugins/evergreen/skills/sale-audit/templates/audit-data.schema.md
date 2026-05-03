@@ -12,7 +12,6 @@ The renderer (`../render/render-audit.py`) takes one JSON object and renders it 
 | `language` | `"en"` \| `"cn"` | Echoed into `<html lang="…">`; the `--lang` CLI flag overrides which label pack is loaded. |
 | `skill_version` | string | Filled at render time from `SKILL.md` frontmatter `version:` if absent. Footer reads this. |
 | `skill_updated` | string | Filled at render time from `SKILL.md` frontmatter `updated:` if absent. Reserved — not currently rendered. |
-| `bank_ledger_version` | string | Filled at render time from `../bank-ledger/SKILL.md` frontmatter `version:` if absent. Footer reads this. |
 | `generated_at` | string `YYYY-MM-DD HH:MM` | Filled by `datetime.now()` if absent. Footer reads this. |
 | `station` | object | `code` (`"TK"`/`"BS"`/`"BL"`), `name_long`, `name_long_cn`. |
 | `business_date` | string `YYYY-MM-DD` | Date being audited. |
@@ -283,7 +282,7 @@ The renderer:
 
 - Loads `audit.html.j2`, `labels-{en|cn}.json`, the data JSON.
 - Reads `templates/audit.css` and inlines it into the rendered HTML as a `<style>` block (the HTML is fully self-contained — required for the production two-step flow where `anthropic-skills:pdf` rasterises the scratch HTML at a different working directory; see SKILL.md §7.1).
-- Adds `skill_version` / `skill_updated` from `SKILL.md` frontmatter, `bank_ledger_version` from sibling `../bank-ledger/SKILL.md`, and `generated_at` from `datetime.now()` if absent.
+- Adds `skill_version` / `skill_updated` from `SKILL.md` frontmatter and `generated_at` from `datetime.now()` if absent. (The `bank_ledger_version` field is gone — bank-clearance verification moved to a separate skill, so sale-audit no longer reads `../bank-ledger/SKILL.md`.)
 - Auto-escapes by default; fields documented above as accepting HTML (`section_5_checklist`, `slip.notes`, `cfp_deposit.subtitle`, `safeguards_rule_note`, `section_3_cash.footer_note`) bypass via the template's `|safe` filter and are the LLM's responsibility to keep clean.
 - Writes `.html` (no extra deps) or `.pdf` (requires `weasyprint`).
 - Never reads files other than the four above (`audit.html.j2`, `labels-{en,cn}.json`, the data JSON, `audit.css`).
