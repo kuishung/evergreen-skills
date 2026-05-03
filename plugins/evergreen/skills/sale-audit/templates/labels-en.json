@@ -35,9 +35,6 @@
     "cfp_topup_label": "CFP Top-up — non-revenue",
     "cfp_topup_subtotal": "CFP Top-up subtotal",
     "subtotal_label": "subtotal",
-    "receivables_label": "Receivables (not received today)",
-    "reconciliation_label": "Total inflow (table)",
-    "reconciliation_vs_slips": "vs Sum of slips uploaded",
     "col_doc": "Doc",
     "col_type": "Type",
     "col_amt": "Amt (RM)",
@@ -47,6 +44,16 @@
     "col_pos": "POS✓",
     "col_in_fr": "In FR",
     "col_notes": "Notes"
+  },
+
+  "section_2b": {
+    "title": "Section 2b — Inflow reconciliation summary",
+    "total_inflow_label": "Total Inflow (from §1 headline)",
+    "total_inflow_caption": "Sum of revenue + non-revenue inflow recognised today.",
+    "sum_components_label": "Sum of components",
+    "col_label": "Channel / category",
+    "col_amount": "Amount (RM)",
+    "col_evidence": "Evidence"
   },
 
   "legend": {

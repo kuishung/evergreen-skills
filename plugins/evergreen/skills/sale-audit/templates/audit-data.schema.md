@@ -20,7 +20,8 @@ The renderer (`../render/render-audit.py`) takes one JSON object and renders it 
 | `inflow` | object | `{total, revenue, cfp_deposit}`, all numeric (RM). |
 | `revenue` | object | See **Revenue object** below. |
 | `cfp_deposit` | object | See **CFP Deposit object** below. |
-| `section_2` | object | Bank-grouped channel table. See below. |
+| `section_2` | object | Bank-grouped channel table (slip-by-slip evidence). See below. |
+| `section_2b` | object | Inflow reconciliation summary — every component of `inflow.total` accounted for. See below. |
 | `section_3_cash` | object | Single arithmetic flow + FR comparison. See below. |
 | `section_3_fr_aggregation` | object | FR-vs-slips reconciliation. See below. |
 | `section_4_fuel` | object | One row per fuel product. See below. |
@@ -113,23 +114,44 @@ Per §9.2, the flat per-channel table is replaced with a bank-grouped table. CFP
     }
   ],
 
-  // Receivables block (BUDI95 IPTB, etc.) — optional, render only when
-  // there are receivables to show. NOT a bank-credited inflow today.
-  "receivables": null,
-
-  // Reconciliation row at the foot of the table — total inflow captured
-  // in this table vs sum of slips uploaded today.
-  "reconciliation": {
-    "total_inflow": 24909.30,
-    "sum_slips":    24909.30,
-    "passed": true,
-    "result": "✓ Pass — table captures every slip uploaded today",
-    "finding_n": null                          // set to int when passed:false
-  },
-
   // Optional explanatory note rendered below the legend, e.g. for the
   // §9.2 Safeguards classification rule when the call was non-trivial.
   "safeguards_rule_note": "<strong>Safeguards classification:</strong> ..."
+}
+```
+
+The bank-grouped table no longer carries a foot reconciliation row — that role has moved to `section_2b` (the headline reconciliation summary). The `receivables` block from earlier drafts is also gone — receivables (BUDI95 IPTB) and non-bank inflows (CFP voucher redemption) appear in the §2b summary instead, with their evidence (PUKAL, CFP report) named inline.
+
+## Section 2b — Inflow reconciliation summary
+
+```jsonc
+{
+  "subtitle": "Headline reconciliation — every component of §1 Total Inflow accounted for. ...",
+  "total_inflow": 49654.60,                   // matches data.inflow.total
+  "rows": [
+    { "label": "AmBank — revenue via AMB accounts (sum of AMB 8135 + AMB 8146 from §2)",
+      "amount": 23941.80,
+      "evidence": "9 IFT slips + 3 Merchant slips + 8 Safeguards slips — see §2." },
+    { "label": "Maybank — revenue via MBB accounts",
+      "amount":     0.00,
+      "evidence": "No revenue routed via Maybank today." },
+    { "label": "CFP Top-up (non-revenue) — via MBB 5366",
+      "amount":   967.50,
+      "evidence": "1 TTCFP slip — see §2 CFP Top-up block." },
+    { "label": "BUDI95 — IPTB-claimable receivable (gov claim, not banked today)",
+      "amount": 11236.33,
+      "evidence": "PUKAL BUDI95 receipts (Shift A + Shift B); claimed back from IPTB." },
+    { "label": "CFP Vouchers — redemption against pre-paid balance (no bank movement)",
+      "amount": 13489.96,
+      "evidence": "9 redemption lines on CFP report; matches GreenPOS Voucher MOP." },
+    { "label": "Cash on hand — today's till change (closing − opening)",
+      "amount":    19.01,
+      "evidence": "Reconciled in §3 cash flow." }
+  ],
+  "sum_components": 49654.60,                 // arithmetic sum of every row above
+  "passed": true,                             // sum_components == total_inflow ?
+  "result": "✓ Pass — total inflow reconciles to the channel breakdown",
+  "finding_n": null                           // set when passed:false
 }
 ```
 

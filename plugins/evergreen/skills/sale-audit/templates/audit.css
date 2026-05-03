@@ -564,3 +564,31 @@ table.audit.cash-flow .op {
 .revenue-segments tfoot td:nth-child(4) {
   font-variant-numeric: tabular-nums;
 }
+
+/* --- 19. §2b reconciliation summary --------------------------------
+   Headline-flavoured sub-band so it reads as a section but doesn't
+   compete with the main section bands. */
+.section-band.sub-band {
+  background: var(--brand-mid);
+  color: #fff;
+  font-size: 10pt;
+  margin-top: 5mm;
+}
+
+table.audit.recon-summary tbody tr.inflow-headline td {
+  background: var(--brand-dark);
+  color: #fff;
+  border-bottom: 0.4mm solid var(--brand-dark);
+  padding: 2.2mm 3mm;
+}
+table.audit.recon-summary tbody tr.inflow-headline td .muted {
+  color: #d8e6df;
+}
+table.audit.recon-summary tbody tr.inflow-headline:nth-child(even) td {
+  background: var(--brand-dark);   /* override striping */
+}
+table.audit.recon-summary tfoot td {
+  background: var(--brand-tint);
+  font-weight: 700;
+  border-top: 0.4mm solid var(--brand-dark);
+}

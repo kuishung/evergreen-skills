@@ -1,9 +1,9 @@
 {
   "schema_version": 2,
   "language": "en",
-  "skill_version": "0.18.0",
-  "skill_updated": "2026-05-03 21:00",
-  "generated_at": "2026-05-03 21:00",
+  "skill_version": "0.19.0",
+  "skill_updated": "2026-05-03 21:30",
+  "generated_at": "2026-05-03 21:30",
 
   "station": {
     "code": "BL",
@@ -224,15 +224,36 @@
       }
     ],
 
-    "reconciliation": {
-      "total_inflow": 24909.30,
-      "sum_slips": 24909.30,
-      "passed": true,
-      "result": "✓ Pass — table captures every slip uploaded today",
-      "finding_n": null
-    },
-
     "safeguards_rule_note": "<strong>Safeguards classification:</strong> a Safeguards (G4S) receipt is reclassified as <em>We Direct Bank-in</em> only if our company bank-account number is printed on the receipt itself (cash credits straight to that account). All 8 Safeguards slips today carry G4S courier numbering (HLnnnn) without our account printed → kept in the <em>Safeguards</em> channel under AMB 8135 (G4S clearing)."
+  },
+
+  "section_2b": {
+    "subtitle": "Headline reconciliation — every component of §1 Total Inflow accounted for. The §2 slip detail above evidences the bank lines below; PUKAL receipts evidence BUDI95; the CFP report evidences the voucher redemption line; the till change is reconciled in §3.",
+    "total_inflow": 49654.60,
+    "rows": [
+      { "label": "AmBank — revenue via AMB accounts (sum of AMB 8135 + AMB 8146 from §2)",
+        "amount": 23941.80,
+        "evidence": "9 IFT slips + 3 Merchant slips + 8 Safeguards slips — see §2." },
+      { "label": "Maybank — revenue via MBB accounts",
+        "amount":     0.00,
+        "evidence": "No revenue routed via Maybank today." },
+      { "label": "CFP Top-up (non-revenue) — via MBB 5366",
+        "amount":   967.50,
+        "evidence": "1 TTCFP slip — see §2 CFP Top-up block." },
+      { "label": "BUDI95 — IPTB-claimable receivable (gov claim, not banked today)",
+        "amount": 11236.33,
+        "evidence": "PUKAL BUDI95 receipts (Shift A + Shift B); claimed back from IPTB." },
+      { "label": "CFP Vouchers — redemption against pre-paid balance (no bank movement)",
+        "amount": 13489.96,
+        "evidence": "9 redemption lines on CFP report; matches GreenPOS Voucher MOP." },
+      { "label": "Cash on hand — today's till change (closing − opening)",
+        "amount":    19.01,
+        "evidence": "Reconciled in §3 cash flow." }
+    ],
+    "sum_components": 49654.60,
+    "passed": true,
+    "result": "✓ Pass — total inflow reconciles to the channel breakdown",
+    "finding_n": null
   },
 
   "section_3_cash": {

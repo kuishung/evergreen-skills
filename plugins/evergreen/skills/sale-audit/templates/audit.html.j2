@@ -265,55 +265,7 @@
       </tr>
       {% endfor %}
 
-      {# ── Receivables (BUDI95 etc.) — optional ── #}
-      {% if data.section_2.receivables %}
-      <tr class="bank-header receivables">
-        <td colspan="9">{{ labels.section_2.receivables_label }} — {{ labels.total }} RM {{ money(data.section_2.receivables.total) }}</td>
-      </tr>
-        {% for ch in data.section_2.receivables.channels %}
-          <tr class="channel-header">
-            <td colspan="9"><em>{{ ch.name }} <span class="muted">· {{ ch.note }}</span></em></td>
-          </tr>
-          {% for slip in ch.slips %}
-          <tr>
-            <td>{{ slip.doc }}</td>
-            <td>{{ slip.type }}</td>
-            <td class="num">{{ money(slip.amount) }}</td>
-            <td class="center">{% if slip.date_ok is none %}<span class="muted">—</span>{% else %}{{ tick(slip.date_ok) }}{% endif %}</td>
-            <td class="center">{% if slip.uniq_ok is none %}<span class="muted">—</span>{% else %}{{ tick(slip.uniq_ok) }}{% endif %}</td>
-            <td>{{ slip.acct }}</td>
-            <td class="center">{% if slip.pos_ok is none %}<span class="muted">n/a</span>{% else %}{{ tick(slip.pos_ok) }}{% endif %}</td>
-            <td class="center">{{ in_fr_cell(slip.in_fr) }}</td>
-            <td>{{ slip.notes|safe }}</td>
-          </tr>
-          {% endfor %}
-        {% endfor %}
-      <tr class="bank-subtotal receivables">
-        <td colspan="2">{{ labels.section_2.receivables_label }} — {{ labels.section_2.subtotal_label }}</td>
-        <td class="num">{{ money(data.section_2.receivables.total) }}</td>
-        <td colspan="6"></td>
-      </tr>
-      {% endif %}
-
     </tbody>
-    {# ── Reconciliation row at the foot — Total inflow vs Sum of slips ── #}
-    {% if data.section_2.reconciliation %}
-    {% set rec = data.section_2.reconciliation %}
-    <tfoot>
-      <tr class="total{% if not rec.passed %} variance{% endif %}">
-        <td colspan="2">{{ labels.section_2.reconciliation_label }}</td>
-        <td class="num">{{ money(rec.total_inflow) }}</td>
-        <td colspan="6">
-          {{ labels.section_2.reconciliation_vs_slips }} RM {{ money(rec.sum_slips) }}
-          {% if rec.passed %}
-            → <span class="tickbox">{{ rec.result|default('✓ Pass') }}</span>
-          {% else %}
-            → <span class="tickbox x">{{ rec.result|default('✗ Variance') }}</span> {{ finding_ref(rec.finding_n) }}
-          {% endif %}
-        </td>
-      </tr>
-    </tfoot>
-    {% endif %}
   </table>
 
   <div class="legend">
@@ -326,6 +278,57 @@
 
   {% if data.section_2.safeguards_rule_note %}
   <div class="note">{{ data.section_2.safeguards_rule_note|safe }}</div>
+  {% endif %}
+
+  {# §2b — Headline reconciliation summary. Every component of §1
+     Total Inflow accounted for. The §2 slip detail above evidences
+     the bank lines below; PUKAL receipts evidence BUDI95; the CFP
+     report evidences the voucher redemption line; the till change
+     is reconciled in §3. #}
+  {% if data.section_2b %}
+  <h2 class="section-band sub-band">{{ labels.section_2b.title }}</h2>
+
+  {% if data.section_2b.subtitle %}
+  <div class="note" style="margin:0 0 2mm 0;">{{ data.section_2b.subtitle|safe }}</div>
+  {% endif %}
+
+  <table class="audit recon-summary">
+    <thead>
+      <tr>
+        <th>{{ labels.section_2b.col_label }}</th>
+        <th class="num">{{ labels.section_2b.col_amount }}</th>
+        <th>{{ labels.section_2b.col_evidence }}</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr class="total inflow-headline">
+        <td><strong>{{ labels.section_2b.total_inflow_label }}</strong></td>
+        <td class="num"><strong>{{ money(data.section_2b.total_inflow) }}</strong></td>
+        <td><span class="muted">{{ labels.section_2b.total_inflow_caption }}</span></td>
+      </tr>
+      {% for row in data.section_2b.rows %}
+      <tr>
+        <td>{{ row.label }}</td>
+        <td class="num">{{ money(row.amount) }}</td>
+        <td><span class="muted">{{ row.evidence }}</span></td>
+      </tr>
+      {% endfor %}
+    </tbody>
+    <tfoot>
+      {% set rec = data.section_2b %}
+      <tr class="total{% if not rec.passed %} variance{% endif %}">
+        <td>{{ labels.section_2b.sum_components_label }}</td>
+        <td class="num">{{ money(rec.sum_components) }}</td>
+        <td>
+          {% if rec.passed %}
+            <span class="tickbox">{{ rec.result|default('✓ Pass') }}</span>
+          {% else %}
+            <span class="tickbox x">{{ rec.result|default('✗ Variance') }}</span> {{ finding_ref(rec.finding_n) }}
+          {% endif %}
+        </td>
+      </tr>
+    </tfoot>
+  </table>
   {% endif %}
 
   {# §3 redesigned per §9.5: single arithmetic flow, no FR/Computed split.

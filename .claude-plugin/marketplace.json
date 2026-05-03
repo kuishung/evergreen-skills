@@ -19,7 +19,7 @@
       "name": "evergreen",
       "source": "./plugins/evergreen",
       "description": "Evergreen operational skills — daily sale audit, AP invoice-to-Autocount import, bank-ledger Google-Sheet ingestion, WhatsApp notifications via Twilio, and related back-office workflows for TK, BS, and BL petrol stations.",
-      "version": "0.23.0",
+      "version": "0.24.0",
       "author": { "name": "Kui Shung" }
     }
   ]

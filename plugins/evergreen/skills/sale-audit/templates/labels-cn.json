@@ -35,9 +35,6 @@
     "cfp_topup_label": "CFP 充值 — 非营收",
     "cfp_topup_subtotal": "CFP 充值小计",
     "subtotal_label": "小计",
-    "receivables_label": "应收款项（今日未实际入账）",
-    "reconciliation_label": "本表流入合计",
-    "reconciliation_vs_slips": "对比已上传收据合计",
     "col_doc": "单号",
     "col_type": "类型",
     "col_amt": "金额 (RM)",
@@ -47,6 +44,16 @@
     "col_pos": "POS✓",
     "col_in_fr": "在FR表",
     "col_notes": "备注"
+  },
+
+  "section_2b": {
+    "title": "第 2b 节 — 流入对账小结",
+    "total_inflow_label": "总流入（§1 表头数）",
+    "total_inflow_caption": "今日确认的营收 + 非营收流入总和。",
+    "sum_components_label": "各项合计",
+    "col_label": "渠道 / 类别",
+    "col_amount": "金额 (RM)",
+    "col_evidence": "证据"
   },
 
   "legend": {
