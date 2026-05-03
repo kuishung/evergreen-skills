@@ -10,7 +10,7 @@ Open PowerShell on the server (the regular one — admin not required) and paste
 iwr https://raw.githubusercontent.com/kuishung/evergreen-skills/main/tools/win11-scheduled-audit/install-schedule.ps1 -UseBasicParsing | iex
 ```
 
-The installer asks for **3 things** (daily-report root, audit-output root, run time), writes a wrapper script + config to `%ProgramData%\Evergreen\sale-audit\`, and registers a Task Scheduler entry. Total time ~1 minute.
+The installer asks for up to **7 things** (3 required: daily-report root, audit-output root, run time; 4 optional for the WhatsApp + Drive-mirror flow: Twilio creds path, recipients path, Drive-mirror root, Drive folder URL — leave any blank to disable). It writes a wrapper script + config to `%ProgramData%\Evergreen\sale-audit\`, and registers a Task Scheduler entry. Total time ~1–2 minutes.
 
 It also offers to run a test immediately so you can confirm the audit works end-to-end before tomorrow morning's run fires for real.
 

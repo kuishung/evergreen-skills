@@ -82,14 +82,33 @@ $RunTime         = Read-WithDefault 'Daily run time (HH:mm 24h)' '06:30'
 # longer passes a CLEARANCE block in the claude prompt.
 
 # WhatsApp notifications (whatsapp-send skill, chained from sale-audit
-# §8 step 6). All three are optional — leave blank to disable WhatsApp
+# §8 step 6). All four are optional — leave blank to disable WhatsApp
 # entirely. The audit still runs and writes PDFs; only the chained
-# notification step is skipped when either path is empty.
+# notification step is skipped when the credentials/recipients are
+# missing.
+#
+# AuditMirrorRoot is for the local→Drive mirror flow: the audit-output
+# root stays local (Cowork needs that), but each day's PDFs are copied
+# to a Drive mirror folder right after rendering so WhatsApp recipients
+# can click through to view them. AuditDriveFolderUrl is the share URL
+# of that *mirror* folder (NOT the audit-output folder).
 Write-Host ""
 Write-Host "WhatsApp notifications (optional — blank Enter disables)" -ForegroundColor Cyan
 $TwilioCredsPath     = Read-WithDefaultAllowBlank 'Twilio credentials JSON path'   "$env:USERPROFILE\.evergreen\twilio\credentials.json"
 $RecipientsPath      = Read-WithDefaultAllowBlank 'WhatsApp recipients JSON path'  ''
-$AuditDriveFolderUrl = Read-WithDefaultAllowBlank 'Audit Drive folder URL (paste empty to use local path)' ''
+$AuditMirrorRoot     = Read-WithDefaultAllowBlank 'Audit-mirror root on Drive (e.g. G:\My Drive\Evergreen\AuditMirror)' ''
+$AuditDriveFolderUrl = Read-WithDefaultAllowBlank 'Audit Drive folder URL (the share URL of AuditMirrorRoot above)' ''
+
+# Create the mirror root if the user provided one and it doesn't exist
+if ($AuditMirrorRoot -and -not (Test-Path $AuditMirrorRoot)) {
+    $resp = Read-Host "Audit-mirror root doesn't exist: $AuditMirrorRoot - create it now? [Y/n]"
+    if ($resp -eq '' -or $resp -match '^[Yy]') {
+        New-Item -ItemType Directory -Path $AuditMirrorRoot -Force | Out-Null
+        Write-Host "  Created $AuditMirrorRoot" -ForegroundColor DarkGray
+        Write-Host "  Next: share this folder once on drive.google.com (right-click → Share → Anyone with link → Viewer → Copy link)." -ForegroundColor DarkGray
+        Write-Host "  Re-run this installer once you have the URL and paste it at the 'Audit Drive folder URL' prompt." -ForegroundColor DarkGray
+    }
+}
 
 # Sanity-check the run time
 if ($RunTime -notmatch '^\d{2}:\d{2}$') {
@@ -133,6 +152,7 @@ $configPath  = Join-Path $installRoot 'config.json'
     Stations            = @('TK', 'BS', 'BL')
     TwilioCredsPath     = $TwilioCredsPath
     RecipientsPath      = $RecipientsPath
+    AuditMirrorRoot     = $AuditMirrorRoot
     AuditDriveFolderUrl = $AuditDriveFolderUrl
 } | ConvertTo-Json | Set-Content -Path $configPath -Encoding UTF8
 
@@ -171,6 +191,40 @@ $env:FORCE_AUTOUPDATE_PLUGINS = '1'
 
 $stationsCsv = $Cfg.Stations -join ', '
 
+# Mirror block — when AuditMirrorRoot is set, instruct claude to copy
+# today's date subfolder from the local AuditOutputRoot to the Drive
+# AuditMirrorRoot right after rendering. This bridges the
+# Cowork-needs-local-folder constraint with the
+# WhatsApp-needs-shareable-URL constraint: the local copy stays put
+# (Cowork still works), the Drive mirror is what recipients click.
+$mirrorBlock = ''
+if ($Cfg.AuditMirrorRoot -and $Cfg.AuditMirrorRoot.Trim().Length -gt 0) {
+    # Pre-compute the source and destination date paths as plain strings
+    # so the prompt to claude doesn't carry PowerShell-syntax variables
+    # that need escaping inside this nested here-string. Claude reads
+    # the literal paths and runs Copy-Item itself.
+    $yyyy   = $auditDate.Substring(0,4)
+    $yyyymm = $auditDate.Substring(0,7)
+    $srcDateFolder = Join-Path (Join-Path (Join-Path $Cfg.AuditOutputRoot $yyyy) $yyyymm) $auditDate
+    $dstDateFolder = Join-Path (Join-Path (Join-Path $Cfg.AuditMirrorRoot $yyyy) $yyyymm) $auditDate
+    $mirrorBlock = @"
+
+MIRROR (local → Drive): After all 6 PDFs are written for the day,
+copy today's date subfolder from local to the Drive mirror so the
+WhatsApp folder URL has something to show. Run this PowerShell BEFORE
+invoking whatsapp-send (use the Bash tool with shell powershell, or
+the equivalent):
+  Source: $srcDateFolder
+  Dest:   $dstDateFolder
+  Command: New-Item -ItemType Directory -Path '$dstDateFolder' -Force | Out-Null;
+           Copy-Item -Path '$srcDateFolder\*' -Destination '$dstDateFolder' -Recurse -Force
+The local copy stays in place for Cowork access. If the mirror copy
+errors (Drive not mounted, disk full, etc.), log the error and
+continue to whatsapp-send — better to send a message with no Drive
+contents than to skip the message entirely.
+"@
+}
+
 # WhatsApp config block — only injected into the prompt when BOTH the
 # Twilio credentials path AND the WhatsApp recipients path are set
 # AND both files actually exist on disk. Either missing → WhatsApp is
@@ -180,7 +234,7 @@ $twilioReady     = $Cfg.TwilioCredsPath -and (Test-Path $Cfg.TwilioCredsPath)
 $recipientsReady = $Cfg.RecipientsPath  -and (Test-Path $Cfg.RecipientsPath)
 if ($twilioReady -and $recipientsReady) {
     $driveLine = if ($Cfg.AuditDriveFolderUrl -and $Cfg.AuditDriveFolderUrl.Trim().Length -gt 0) {
-        "- Audit Drive folder URL: $($Cfg.AuditDriveFolderUrl)"
+        "- Audit Drive folder URL (mirror parent): $($Cfg.AuditDriveFolderUrl)"
     } else {
         "- Audit Drive folder URL: (not set — WhatsApp message will use local path)"
     }
@@ -191,7 +245,7 @@ WHATSAPP NOTIFICATIONS (whatsapp-send skill, chained per sale-audit ``§8`` step
 - WhatsApp recipients path: $($Cfg.RecipientsPath)
 $driveLine
 
-After both PDFs are written for each station, invoke the whatsapp-send skill (per sale-audit ``§8`` step 6) — best-effort, never blocks the audit. If the send fails for any reason, log the failure and continue; do NOT raise it as a §6 audit finding (it's an operational issue, not an audit issue).
+After both PDFs are written for each station (and the MIRROR step above is done if applicable), invoke the whatsapp-send skill (per sale-audit ``§8`` step 6) — best-effort, never blocks the audit. The WhatsApp body's "📂" line should point at the Drive folder URL above (recipients then navigate to <YYYY>/<YYYY-MM>/<YYYY-MM-DD>/ to see today's PDFs). If the send fails for any reason, log the failure and continue; do NOT raise it as a §6 audit finding (it's an operational issue, not an audit issue).
 "@
 }
 
@@ -207,7 +261,7 @@ TASK: Run the daily sale audit for business date $auditDate across stations $sta
 USE THESE REFERENCE VALUES for this run (override anything in older memory):
 - Daily-report root: $($Cfg.DailyReportRoot)
 - Audit-output root: $($Cfg.AuditOutputRoot)
-$whatsappBlock
+$mirrorBlock$whatsappBlock
 CLEARANCE: Out of scope for sale-audit v0.18.0+. Bank-clearance verification has moved to a separate skill; per ``§6`` rule 11, the audit reports inflow categorisation only and does not attempt to confirm slip-level bank credits.
 
 EXECUTION: Do not stop to ask questions. If any check fails, log the reason and continue to the next check / next station so the run still produces what it can. Exit non-zero only if no PDFs at all could be rendered.
