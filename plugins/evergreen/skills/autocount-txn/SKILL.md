@@ -1,6 +1,6 @@
 ---
 name: autocount-txn
-description: Use this skill whenever the user (Evergreen back-office) wants to turn a batch of transactions into an Autocount XLS import file — for any of the nine Autocount import modules: AP Invoice, AP Credit Note, AP Debit Note, AP Payment, AR Invoice, AR Credit Note, AR Debit Note, AR Payment, or General Journal Entry. (Vendor-invoice ingestion from scanned PDFs is the separate `ap-invoice` skill — that one is the "scan folder + dedupe + emit AP Invoice import" workflow; this skill is the lower-level "given structured row data, populate any of the 9 Autocount XLS templates".) Triggers include "build AP credit note import", "import AR receipts into Autocount", "generate journal entry XLS", "populate Autocount template for <module>", or any explicit reference to one of the nine module names above.
+description: Use this skill whenever the user (Evergreen back-office) wants to turn a batch of transactions into an Autocount XLS import file — for any of the nine Autocount import modules: AP Invoice, AP Credit Note, AP Debit Note, AP Payment, AR Invoice, AR Credit Note, AR Debit Note, AR Payment, or General Journal Entry. The skill takes structured row data (CSV, XLSX, or pasted-in batch), looks up creditor / debtor / GL-account / project codes against static reference files, and populates the matching Autocount XLS template. Triggers include "build AP invoice import", "build AP credit note import", "import AR receipts into Autocount", "generate journal entry XLS", "populate Autocount template for <module>", or any explicit reference to one of the nine module names above.
 version: 0.1.0
 updated: 2026-05-04
 ---
@@ -17,9 +17,9 @@ updated: 2026-05-04
 
 **Does NOT:** import into Autocount itself. Autocount's import is interactive (file picker → preview → confirm); this skill produces the file, the operator clicks Import. The skill never logs into Autocount, never writes to its database, and never bypasses the operator review step.
 
-**Does NOT:** do OCR or invoice-content extraction. If the source is scanned PDFs of vendor invoices, route to `ap-invoice` instead — it does the scan / dedupe / extract / emit-AP-Invoice flow end-to-end. This skill assumes the source data already arrives as rows with fields, not as document scans.
+**Does NOT:** do OCR or invoice-content extraction from scanned PDFs / images. The skill assumes the source data already arrives as structured rows with named fields. If you're starting from PDFs, run them through OCR / hand-data-entry first, produce a CSV or XLSX, then feed that to this skill.
 
-## 2. Stations and project codes (`ProjNo`) — same as `ap-invoice`
+## 2. Stations and project codes (`ProjNo`)
 
 The `ProjNo` column in Autocount must be one of:
 
@@ -142,10 +142,10 @@ Before reusing any remembered path, verify it resolves; if not, ask once and upd
 
 ## 5. Static folder — required reference files — TODO (operator confirms)
 
-The skill never invents creditor codes, debtor codes, GL accounts, project codes, or tax types. All must be looked up from authoritative reference files in TXN-static. **TODO — operator confirms which reference files belong here, mirroring `ap-invoice/SKILL.md` §3 conventions:**
+The skill never invents creditor codes, debtor codes, GL accounts, project codes, or tax types. All must be looked up from authoritative reference files in TXN-static. **TODO — operator confirms which reference files belong here. Likely set:**
 
 - `chart-of-accounts.xlsx` — Autocount GL account master (`AccNo`, `AccName`, optional `IsControl`). Source-of-truth for §3 `AccNo` cells.
-- `creditor-master.xlsx` — vendors. One row per creditor with `CreditorCode`, `CreditorName`, `Aliases`, `DefaultAccNo`, `DefaultTaxType`. Used by AP modules (§3.1–3.4). **Re-use the same `vendor-master.xlsx` from the `ap-invoice` skill if it already exists** — same data, no need for two files.
+- `creditor-master.xlsx` — vendors. One row per creditor with `CreditorCode`, `CreditorName`, `Aliases`, `DefaultAccNo`, `DefaultTaxType`. Used by AP modules (§3.1–3.4).
 - `debtor-master.xlsx` — customers. Same shape as creditor-master, `DebtorCode` instead of `CreditorCode`. Used by AR modules (§3.5–3.8).
 - `tax-type-map.txt` — Autocount tax codes valid in the operator's COA, e.g. `SR`, `ZR`, `OS`, `EP`, blank. The skill rejects any source row whose tax type is not in this list.
 - `project-no-map.txt` — the nine `ProjNo` codes in §2, possibly with default GL accounts per project.
@@ -156,7 +156,7 @@ For each reference file, **document its columns / format here once the operator 
 
 The skill's job per run: read N source rows, output one Autocount XLS. **TODO — operator describes how transactions arrive for each module they actually use.** Likely scenarios:
 
-- **AP Invoice / AP Credit Note / AP Debit Note** — usually arrive via the `ap-invoice` skill's intermediate JSON, OR as a hand-prepared XLSX from accounts staff.
+- **AP Invoice / AP Credit Note / AP Debit Note** — usually a hand-prepared XLSX from accounts staff after they've manually transcribed the vendor bills, OR an OCR-extracted JSON from any external invoice-extraction tool. The skill itself doesn't OCR PDFs.
 - **AR Invoice / AR Credit Note / AR Debit Note** — arrive as a hand-prepared XLSX, or generated from a sales-side pipeline (TBD).
 - **AP Payment / AR Payment** — arrive from bank statements (the bank-clearance skill, when it ships) or hand-prepared after staff reconciles cheques + IFTs against open invoices.
 - **General Journal** — arrive as a hand-prepared XLSX (typical for accruals, depreciation, year-end adjustments).
@@ -168,7 +168,7 @@ For each input shape the skill needs:
 
 ## 7. Workflow
 
-(Will be filled in once §5 + §6 are answered. Likely shape, copying the `ap-invoice` pattern:)
+(Will be filled in once §5 + §6 are answered. Likely shape:)
 
 1. Confirm the three reference values in §4 (TXN-input root, TXN-output root, TXN-static folder) and the target Autocount module.
 2. Verify the static files in §5 exist and parse cleanly.
@@ -189,7 +189,7 @@ For each input shape the skill needs:
 
 ## 9. Open questions for the operator (resolve these before the skill goes operational)
 
-- For each of the 9 modules in §3, do we actually want this skill to handle it, or is some other path already in place (e.g., `ap-invoice` already covers AP Invoice — should that skill emit using **this** skill's templates instead of its own, or do they stay separate)?
+- For each of the 9 modules in §3, confirm the upstream source (hand-keyed XLSX? upstream skill output? bank-statement parser?). The skill spec for §6 follows from that.
 - Static reference files: confirm which ones are needed per module (§5).
 - Source data shape per module (§6) — especially: do AP Payments / AR Payments come from bank-statement parsing, from hand-prepared XLSX, or from another upstream skill?
 - Naming convention for output files inside TXN-output root — date-folder or flat? One file per module per month or one combined?

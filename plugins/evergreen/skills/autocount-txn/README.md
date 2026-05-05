@@ -4,7 +4,7 @@ Quick orientation. Authoritative spec is **`SKILL.md`**.
 
 ## What this skill is meant to do
 
-Take a batch of transactions (bank receipts, GL journals, sales receipts — anything **except** AP invoices, which `ap-invoice` already handles) and produce an Autocount-compatible `.xls` import file the operator drops into Autocount's import dialog.
+Take a batch of transactions (AP invoices, AP/AR credit notes, AP/AR debit notes, AP/AR payments, AR invoices, or general journal entries — any of the nine Autocount import modules) and produce an Autocount-compatible `.xls` import file the operator drops into Autocount's import dialog.
 
 ## What's in this folder
 
@@ -15,9 +15,9 @@ Take a batch of transactions (bank receipts, GL journals, sales receipts — any
 | `scripts/populate-import.py`        | Stub for the deterministic builder. Real logic lands here once the operator answers SKILL.md §2 / §5 / §6 / §7. |
 | `examples/`                         | Sample source data + expected output for whichever modules end up scoped. |
 
-## Why this is a separate skill from `ap-invoice`
+## Scope: structured-row input only
 
-AP invoices have their own integrity rules: vendor master, project codes derived from the bill-to address, complete-legal-name enforcement on the company entity. Mixing those with general-ledger or bank-side transactions confuses both flows. Two skills, clean separation.
+The skill never OCRs PDFs or extracts data from invoice images. Source rows must arrive as a CSV / XLSX / pasted-in batch with named fields. If you start from PDFs, run them through OCR or hand-data-entry first to produce a structured table, then feed that to this skill.
 
 ## How to take this from scaffold to operational
 
