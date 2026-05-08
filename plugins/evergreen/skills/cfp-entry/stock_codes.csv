@@ -1,0 +1,7 @@
+station,gas_type,item_code,description,item_group
+TK,Petrol,PETROL - TK,PETROL - TK,FUEL
+TK,Diesel,DIESEL -TK,DIESEL -TK,FUEL
+BS,Petrol,PETROL -BS,PETROL- BS,FUEL
+BS,Diesel,DIESEL- BS,DIESEL- BS,FUEL
+BL,Petrol,PETROL - BL,PETROL - BL,FUEL
+BL,Diesel,DIESEL- BL,DIESEL- BL,FUEL

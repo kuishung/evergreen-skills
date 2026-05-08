@@ -1,8 +1,8 @@
 ---
 name: autocount-txn
-description: Use this skill whenever the user (Evergreen back-office) wants to turn a batch of transactions into an Autocount XLS import file — for any of the nine Autocount import modules: AP Invoice, AP Credit Note, AP Debit Note, AP Payment, AR Invoice, AR Credit Note, AR Debit Note, AR Payment, or General Journal Entry. The skill takes structured row data (CSV, XLSX, or pasted-in batch), looks up creditor / debtor / GL-account / project codes against static reference files, and populates the matching Autocount XLS template. Triggers include "build AP invoice import", "build AP credit note import", "import AR receipts into Autocount", "generate journal entry XLS", "populate Autocount template for <module>", or any explicit reference to one of the nine module names above.
-version: 0.1.0
-updated: 2026-05-04
+description: Use this skill whenever the user (Evergreen back-office) wants to turn a batch of transactions into an Autocount XLS import file — for any of the nine Autocount import modules: AP Invoice, AP Credit Note, AP Debit Note, AP Payment, AR Invoice, AR Credit Note, AR Debit Note, AR Payment, or General Journal Entry. The skill takes structured row data (CSV, XLSX, or pasted-in batch), looks up creditor / debtor / GL-account / project codes against static reference files, and populates the matching Autocount XLS template. Triggers include "build AP invoice import", "build AP credit note import", "import AR receipts into Autocount", "generate journal entry XLS", "populate Autocount template for <module>", or any explicit reference to one of the nine module names above. Does **NOT** cover CFP voucher redemption — that lives in the sibling `cfp-entry` skill (see §10).
+version: 0.1.2
+updated: 2026-05-08
 ---
 
 # Autocount Transaction Import Builder — SCAFFOLD
@@ -34,6 +34,8 @@ Each `ProjNo` is ≤ 10 characters (Autocount limit).
 ## 3. Supported modules and their column layouts
 
 The skill supports **nine** Autocount import modules. Each ships its own XLS template under `templates/`. The operator points the skill at one template per run (via `--type`); rows are appended starting at the first empty data row.
+
+(Sales Invoice is intentionally not in this list — that pipeline lives in the sibling `cfp-entry` skill; see §10.)
 
 > **Header-row convention.** Most templates use a 3-row header:
 > - **Row 1**: section grouping (`Master Columns` / `Detail Columns` / `Payment Detail Column` / `Knock Off Detail`).
@@ -194,3 +196,16 @@ For each input shape the skill needs:
 - Source data shape per module (§6) — especially: do AP Payments / AR Payments come from bank-statement parsing, from hand-prepared XLSX, or from another upstream skill?
 - Naming convention for output files inside TXN-output root — date-folder or flat? One file per module per month or one combined?
 - Re-import idempotence: does Autocount's import detect duplicates on `DocNo` itself, or do we own all the dedup logic in `txn-state.json`?
+
+## 10. CFP voucher redemption — owned by the `cfp-entry` skill
+
+CFP (Customer Fleet Program) voucher-redemption ingestion is **not** handled by this skill. It is owned by the sibling **`cfp-entry`** skill (`plugins/evergreen/skills/cfp-entry/`), which:
+
+- Parses daily CFP / gvLedger PDFs from TK / BS / BL.
+- Looks up the AutoCount `300-XXXX` debtor code, the per-station fuel ItemCode, and the per-station ProjectNo from internal master files.
+- Consolidates by `(date, debtor, station, fuel)` and emits one Sales Invoice per group.
+- Writes back into the operator's own AutoCount Sales template column layout.
+
+If the user asks to "compile CFP", "process voucher redemption", or "make AutoCount import for today's vouchers", route to `cfp-entry`, not to `autocount-txn`.
+
+This skill (`autocount-txn`) covers the nine generic Autocount XLS import modules (§3) and remains the right home for AP/AR/Journal flows that don't have a CFP-style domain adapter.

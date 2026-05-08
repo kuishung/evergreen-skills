@@ -1,0 +1,7 @@
+station,gas_type,price_per_litre,as_of,note
+TK,Petrol,3.97,2026-05-01,Inferred from BL same-day data; verified against PSR TK rows (5637.40 / 1420 L = 3.97)
+TK,Diesel,2.15,2026-05-01,Inferred from BL same-day data
+BS,Petrol,3.97,2026-05-01,Inferred from BL same-day data; verified against HAZAFIRAH (79.40 / 20 = 3.97)
+BS,Diesel,2.15,2026-05-01,Inferred from BL same-day data; verified against HIJAU (107.50 / 50 = 2.15) and KATATA (322.50 / 150 = 2.15)
+BL,Petrol,3.97,2026-05-01,Source data confirms 3.97 across all BL Petrol rows
+BL,Diesel,2.15,2026-05-01,Source data confirms 2.15 (SHAZAM 322.50 / 150)
