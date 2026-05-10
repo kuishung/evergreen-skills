@@ -1,14 +1,14 @@
 ---
 name: cfp-entry
 description: Use this skill when the user (Evergreen petrol-station back-office) wants to convert daily Customer Fuel Pre-paid (CFP) voucher-redemption reports from any of the three Buraqoil stations — TK (Tg Kapor), BS (Berkat Setia), BL (Bubul Lama) — into an AutoCount Sales Invoice import xlsx ready for upload. Triggers include "compile CFP", "process voucher redemption", "make AutoCount import for today's vouchers", "CFP entry", "import CFP", or any task that takes one or more CFP / gvLedger PDFs and produces a sales-import file. The skill produces ONE Sales Invoice per unique (date, customer, station, product) and looks up the AutoCount 300-XXXX debtor code, the per-station fuel ItemCode, and the per-station ProjectNo from internal master files, then writes the result back into the user's own AutoCount Sales template column layout.
-version: 0.6.0
-updated: 2026-05-08
+version: 0.6.6
+updated: 2026-05-10
 ---
 
 # CFP Entry Skill
 
-**Version:** 0.6.0
-**Last updated:** 2026-05-08
+**Version:** 0.6.6
+**Last updated:** 2026-05-10
 **Owner:** Evergreen back-office (KS)
 
 ## What this skill does
@@ -111,17 +111,90 @@ Petrol @ Buraqoil Tg Kapor (5 vch est)
 ```
 All under 80 chars.
 
-### Qty / UOM / UnitPrice rules (v0.6.0)
+### Qty / UOM / UnitPrice rules (v0.6.3)
 - **UOM** -- always `LITER`.
-- **Qty** -- if the source PDF has a litre column for the row
-  (BL `gvLedger` does), sum those litres. If not (TK CFP REPORT,
-  BS gvLedger), derive `Qty = round(Subtotal / refprice, 2)` using
+- **Qty** -- if the source has a litre column on each row (BL `gvLedger`
+  today; future xlsx source for all stations), sum those litres and
+  round to 2 dp. If not (TK CFP REPORT, BS gvLedger), derive
+  `Qty = round(Subtotal / RefPrice, 2)` using
   `reference_prices.csv[(station, gas)]`.
-- **UnitPrice** -- `Subtotal / Qty`, rounded to 4 dp. If source
-  litres were used and the price stays uniform across vouchers,
-  this matches the reference price exactly.
+- **UnitPrice** (v0.6.4 RULE) -- taken **directly** from a source
+  row's `round(amount / litre, 2)`. **NEVER** a weighted average.
+  The CFP system is automatically generated, so per-row
+  `amount / litre` is deterministically uniform within one
+  (date, customer, station, fuel) bucket -- if it isn't, the source
+  data is corrupt, not legitimately mixed.
+  Implementation: bucket UnitPrice = the **first** source row's
+  `round(amount/litre, 2)` (first = source-PDF iteration order,
+  deterministic). Reconciliation Check C then verifies every other
+  source row in the bucket matches that value within RM 0.01.
+  Any disagreement FAILs the run -- the operator must investigate the
+  source data; a "mid-day price change" justification is NOT
+  accepted because the system can't legitimately produce one within
+  a single bucket.
+  RefPrice-fallback path (no source litres, TK / BS PDFs):
+  UnitPrice = the RefPrice rounded to 2 dp.
 - **Subtotal** -- always the source-truth amount (sum of source
-  redemption amounts), so it ties to the bank deposit.
+  redemption amounts), so it ties back to the per-PDF `Total:` footer
+  line. Reconciliation Check A (see Verification section below)
+  enforces this on every run. Note that with UnitPrice at 2 dp,
+  `Qty * UnitPrice` will routinely differ from Subtotal by a fraction
+  of a ringgit -- AutoCount uses the explicit Subtotal column on
+  import, and pipeline conservation (Check B) is what guarantees
+  no money is lost in aggregate.
+
+## Verification / Reconciliation (locked in v0.6.1)
+
+Every run produces a **Reconciliation report** -- printed to the console,
+written to a `Reconciliation` sheet in the output xlsx, and used as the
+script's exit code. Three checks run on every invocation, with a
+RM 0.01 tolerance:
+
+| # | Check | What it proves | Fails when |
+|---|---|---|---|
+| **A** | Per-PDF `Total:` line ↔ sum of parsed redemption rows from that PDF | The parser didn't silently drop a row | Source PDF Total line doesn't match the sum the parser saw. SKIP if the PDF has no Total: footer (the script prints the parser sum so the operator can sanity-check it manually). |
+| **B** | Σ filtered redemptions ↔ Σ consolidated rows + Σ unmapped rows | The consolidator + customer matcher together didn't lose money | Anything was silently dropped between filtering and the output buckets. |
+| **C** | Per source row with a litre value: \|round(amount/litre, 2) − bucket.UnitPrice\| ≤ 0.01 | The v0.6.4 UnitPrice rule actually held — every source row's per-row unit price matches the bucket's chosen UnitPrice (= first source row's value, never a weighted average) | Two source rows in the same (date, customer, station, fuel) bucket disagree on per-row unit price by more than 1 cent. Treat as **corrupt source data** — the CFP system is auto-generated and cannot legitimately produce mixed prices within one bucket. RefPrice-fallback buckets (TK / BS PDFs with no litres) are exempt and counted as "skipped" in the OK note. |
+
+**Exit semantics:**
+- All checks `OK` (or `OK` + `SKIP`) → exit code `0`. Safe to import.
+- Any check `FAIL` → exit code `2`. The xlsx is still written (so you
+  can inspect the `Reconciliation` sheet), but the script prints
+  `DO NOT IMPORT` and a non-zero exit signals automated callers.
+
+**Operator rule:** never import the xlsx into AutoCount until every
+reconciliation check is `OK` or `SKIP`. Claude must surface the
+reconciliation block to the user before saying the run succeeded.
+
+### Total-row handling (locked in v0.6.2)
+
+**Source side.** Every source carries a system-generated Total at the
+end of the data. The skill captures it for Check A and excludes it
+from the redemption list:
+
+| Source format | Where Total lives | How it's captured |
+|---|---|---|
+| TK CFP REPORT (PDF) | `Total:` footer line | `TOTAL_LINE_RX` in the parser; last-seen value wins |
+| BS / BL gvLedger (PDF) | `Total:` / `Grand Total:` footer | same as above |
+| xlsx source (future) | last data row, marked with `Total` / `Grand Total` in the first non-empty cell | xlsx parser will read the value, then drop the row before it enters `List[Redemption]` |
+
+The Total is **only** used as the control number for Check A. It
+never becomes a transaction.
+
+**Output side (locked rule, NON-NEGOTIABLE).** The xlsx that goes to
+AutoCount must contain **only header (row 1) + transaction rows** in
+both the Master and Detail sheets. **No Total row, anywhere.**
+AutoCount computes its own totals on import — a Total row in the
+import would be treated as an extra transaction and double the day's
+revenue.
+
+The script enforces this at write time via `_assert_no_total_row()`,
+which scans both sheets and raises `RuntimeError` if any row's first
+non-empty cell is `Total` / `Grand Total` / `Subtotal` (case-insensitive,
+trailing colon tolerated). The Audit / Unmapped / Reconciliation helper
+sheets are unaffected — AutoCount only reads Master + Detail by sheet
+position, so totals or notes inside those helper sheets cannot leak
+into the import.
 
 ### History of the consolidation rule
 - v0.1: 1 invoice per (date, debtor); all stations and fuels merged.
@@ -137,6 +210,50 @@ All under 80 chars.
   when the source PDF carries no litre column. Output: CSV only
   (xlsx generation requires the Linux Python sandbox).**
 
+### FurtherDescription format (locked in v0.6.6)
+
+The audit trail that previously lived only in the `Audit` helper sheet
+now also rides into AutoCount via `FurtherDescription`, formatted as:
+
+```
+YYYY-MM-DD:
+<voucher> - <fuel> (<qty>)
+<voucher> - <fuel> (<qty>)
+...
+```
+
+Per voucher line, `<qty>` is taken **verbatim** from the source -- no
+derivation:
+
+| Source format | Has litre column? | `<qty>` shown |
+|---|---|---|
+| BL gvLedger | yes | `25.19L` |
+| TK CFP REPORT | no | `RM 100.00` |
+| BS gvLedger | no | `RM 100.00` |
+
+Vouchers within each date are sorted by redemption datetime so the
+trail reads chronologically.
+
+**Multi-day source files.** When the source spans multiple days
+(e.g., Mon + Tue + Wed redemptions in one batch), the v0.3.0
+consolidation rule produces **separate Sales Invoices for each day**,
+not one mega-invoice spanning the days. A customer who fills Petrol at
+BL on Mon AND Tue therefore gets two invoices: `CFP-YYYYMMDD-NNNN` for
+Monday and `CFP-YYYYMMDD-NNNN` for Tuesday, each carrying its own
+single-date FurtherDescription. So under v0.3.0 every
+FurtherDescription has exactly one `YYYY-MM-DD:` heading.
+
+The format renderer is written defensively to handle multi-date
+buckets too (separating each date with a blank line), so if the
+consolidation rule is ever relaxed -- e.g., to (customer, station)
+or (customer, station, fuel) -- the FurtherDescription text will
+adapt automatically without code changes.
+
+Cap is 500 chars. If a bucket has so many vouchers that the
+formatted text exceeds 500, the trailing portion is truncated with
+`...`. The full untruncated trail still lives in the `Audit` helper
+sheet for reference.
+
 ### Required AutoCount columns (locked in v0.5.0)
 
 | Sheet  | Column        | Source                                       |
@@ -150,10 +267,11 @@ All under 80 chars.
 | Master | ExchangeRate  | `1`                                          |
 | Detail | DocNo         | links to master                              |
 | Detail | **ItemCode**  | `stock_codes.csv[(station, gas)]`            |
-| Detail | Description   | `<Gas> @ <Station> (<n> vch) | Vouchers: ...`|
-| Detail | **UOM**       | `Litre` if litre data present, else `Unit`   |
+| Detail | Description   | `<Gas> @ <Station> (<n> vch[ est])`, ≤ 80 chars |
+| Detail | **FurtherDescription** | Date-grouped voucher trail (v0.6.6 format) — see "FurtherDescription format" below; ≤ 500 chars (truncated with `...` if exceeded) |
+| Detail | **UOM**       | always `LITER` (v0.6.0+)                     |
 | Detail | **Qty**       | sum of source litres, or `1` if no litre data|
-| Detail | **UnitPrice** | `Subtotal / Qty`                             |
+| Detail | **UnitPrice** | First source row's `round(amount/litre, 2)` — never a weighted average (v0.6.4 rule); RefPrice fallback rounded 2 dp |
 | Detail | Subtotal      | sum of source amounts (positive)             |
 | Detail | **ProjectNo** | `project_codes.csv[station]` (blank for now) |
 
@@ -190,12 +308,19 @@ When the user asks to "compile CFP", "process voucher redemption",
      --project-codes "D:/CLAUDE/Skill/CFP Entry/cfp-entry/project_codes.csv" \
      --out "D:/CLAUDE/Skill/CFP Entry/output/SalesImport_YYYY-MM-DD.xlsx"
    ```
-5. **Review console output** -- the script prints how many rows it
-   parsed per PDF, how many consolidated rows it produced, and any
-   unmapped companies. Surface unmapped companies to the user so they
-   can decide whether to add to `customer_codes.csv` or treat as a
-   one-off cash sale.
-6. **Hand the file to the user** with a `computer://` link.
+5. **Review console output** -- the script prints, for each PDF: rows
+   parsed, parsed sum, source `Total:` value, and per-PDF `[OK]` /
+   `[MISMATCH]` marker. Then a `=== Reconciliation ===` block with
+   the three checks (A / B / C) defined in the **Verification /
+   Reconciliation** section above.
+6. **Surface findings to the user**:
+   - Any unmapped companies (decide: add to `customer_codes.csv`, or
+     treat as one-off cash sale).
+   - The reconciliation summary (`N FAIL, N OK, N SKIP`).
+7. **DO NOT proceed to import** if any reconciliation check is `FAIL`.
+   The script's exit code is 2 in that case; investigate, fix, re-run.
+8. **Hand the file to the user** with a `computer://` link only after
+   reconciliation is clean.
 
 ## Customer master (`customer_codes.csv`)
 
@@ -282,15 +407,25 @@ $ python compile_cfp.py \
     --project-codes "D:/CLAUDE/Skill/CFP Entry/cfp-entry/project_codes.csv" \
     --out "D:/CLAUDE/Skill/CFP Entry/output/SalesImport_2026-05-01.xlsx"
 
-  parsed   8 rows  <- 20260501-CFP REPORT-TK.pdf
-  parsed   5 rows  <- gvLedger - 2026-05-01T143652.120.pdf
-  parsed  14 rows  <- gvLedger - BL.pdf
+  parsed   8 rows  parsed_total=    XXXX.XX  source_total=    XXXX.XX  delta=+0.00 [OK]   <- 20260501-CFP REPORT-TK.pdf
+  parsed   5 rows  parsed_total=     XXX.XX  source_total=     XXX.XX  delta=+0.00 [OK]   <- gvLedger - 2026-05-01T143652.120.pdf
+  parsed  14 rows  parsed_total=    XXXX.XX  source_total=    XXXX.XX  delta=+0.00 [OK]   <- gvLedger - BL.pdf
 
 Filtered to 2026-05-01: 27 rows
 
 Consolidated 16 customer-station-fuel rows; 1 unmapped row.
 Unmapped companies (add to customer_codes.csv):
    - SINKHONG TRANSPORT  (Diesel, 81.40)
+
+=== Reconciliation ============================================
+  [OK  ] A. 20260501-CFP REPORT-TK.pdf: PDF Total vs parsed sum
+  [OK  ] A. gvLedger - 2026-05-01T143652.120.pdf: PDF Total vs parsed sum
+  [OK  ] A. gvLedger - BL.pdf: PDF Total vs parsed sum
+  [OK  ] B. Conservation: filtered = consolidated + unmapped
+  [OK  ] C. Per-row UnitPrice uniformity: amount/litre matches bucket UnitPrice
+
+  0 FAIL, 5 OK, 0 SKIP
+================================================================
 
 Wrote import file: D:/CLAUDE/Skill/CFP Entry/output/SalesImport_2026-05-01.xlsx
 ```

@@ -13,6 +13,350 @@ When you make a change:
 
 ---
 
+## 0.6.6 — 2026-05-10
+**FurtherDescription format: date-grouped voucher trail with per-voucher fuel + qty.**
+
+KS request: format FurtherDescription as
+```
+YYYY-MM-DD:
+Voucher 1 - Petrol (Liter)
+Voucher 2 - Petrol (Liter)
+...
+```
+plus a confirmation that v0.3.0 ("per customer per station per
+product daily invoicing") remains the consolidation rule.
+
+Multi-day source handling: a multi-day source produces multiple
+single-day Sales Invoices via the v0.3.0 consolidator -- the
+FurtherDescription on each invoice carries only that day's
+vouchers. So under v0.3.0 every FurtherDescription has exactly one
+`YYYY-MM-DD:` heading. The renderer is written defensively for
+multi-date buckets (sections separated by a blank line) so a future
+relaxation of the consolidation rule needs no format change.
+
+Behaviour change:
+- FurtherDescription is now produced by `_build_further_description()`
+  with format:
+    YYYY-MM-DD:
+    <voucher> - <fuel> (<qty>)
+  Vouchers within each date are sorted by redemption datetime;
+  date sections separated by `\\n\\n`.
+- Per-voucher `<qty>` is taken VERBATIM from the source -- never
+  derived:
+    BL (litre present): `25.19L`
+    TK / BS (no litre column): `RM 100.00`
+- Cap raised from 200 -> 500 chars (the new format is more verbose);
+  truncation suffix unchanged ("...").
+
+New helpers in compile_cfp.py:
+- `_format_voucher_line(r)` -- single voucher's line text.
+- `_build_further_description(cr, cap=500)` -- groups by date,
+  sorts within each date, applies cap.
+
+Files changed:
+- `compile_cfp.py`:
+  - Two new private helpers (above).
+  - `build_detail_rows()` -- the inline `Vouchers: ...; ...` string
+    construction is replaced by `_build_further_description(cr)`.
+- `SKILL.md` -- 0.6.5 -> 0.6.6; new "FurtherDescription format
+  (locked in v0.6.6)" subsection documents the format,
+  multi-day handling, and the multi-date-defensive renderer;
+  "Required AutoCount columns" FurtherDescription cell points
+  to the new section.
+- `VERSION` -- `0.6.5` -> `0.6.6`.
+
+Non-breaking:
+- Sales Invoice headers, DocNo numbering, totals, customer mapping,
+  ItemCode / ProjectNo, Description, Subtotal, Qty, UnitPrice, UOM,
+  Audit / Unmapped / Reconciliation sheets -- ALL unchanged.
+- Only the FurtherDescription text format changes.
+
+---
+
+## 0.6.5 — 2026-05-10
+**FurtherDescription column populated with voucher trail; header-matching bug fixed.**
+
+KS observation: "in the [template] there is a Description and
+FurtherDescription Column".
+
+The AutoCount Detail template carries a separate `FurtherDescription`
+field (longer than `Description`'s 80-char cap). v0.6.0 had to drop
+the voucher list from the import because `Description` couldn't hold
+it -- the trail then lived only in the side `Audit` sheet. With
+`FurtherDescription` now wired up, the voucher trail rides into
+AutoCount on import.
+
+Behaviour changes:
+- New `further_description` field on `DetailRow`. Populated by
+  `build_detail_rows()` as `Vouchers: <v1>; <v2>; ...`, capped at
+  200 chars (typical AutoCount FurtherDescription column width;
+  truncated with `...` if a bucket is unusually voucher-heavy).
+- `COLUMN_MAP_DETAIL` gains `further_description` with aliases
+  `furtherdescription` / `furtherdesc` / `further description` /
+  `further desc`. The Audit sheet still carries the full,
+  untruncated voucher list.
+
+Bug fix:
+- `_find_headers()` did `any(a in h for a in aliases)` substring
+  matching -- so the alias `description` matched a
+  `FurtherDescription` header (because `"description"` is a
+  substring of `"furtherdescription"`). With both columns in the
+  template, the script would have written the voucher list into
+  the wrong cell. The matcher now does two passes: exact match
+  first (claiming the column), then substring fallback for any
+  canonical that didn't find an exact hit. Columns claimed in
+  Pass 1 are removed from the Pass 2 pool. Also adds
+  space-stripped header normalisation so `Further Description`
+  matches `furtherdescription` aliases too.
+
+Files changed:
+- `compile_cfp.py`:
+  - `_find_headers()` -- two-pass matching with column claiming.
+  - `COLUMN_MAP_DETAIL` -- new `further_description` entry.
+  - `DetailRow` -- new `further_description` field.
+  - `build_detail_rows()` -- builds the `Vouchers: ...` string,
+    200-char cap, `...` truncation.
+  - `write_import()` -- writes `further_description` into the
+    matched column.
+- `SKILL.md` -- 0.6.4 → 0.6.5; "Required AutoCount columns" table
+  gains a `Detail | FurtherDescription` row; the stale
+  `Description | <Gas>...| Vouchers: ...` cell is corrected
+  (`Description` is short text, `FurtherDescription` carries
+  vouchers).
+- `VERSION` -- `0.6.4` → `0.6.5`.
+
+Non-breaking for templates without a FurtherDescription column:
+- If the column doesn't exist, `_set` is a no-op. Existing
+  templates produce identical output to v0.6.4. The voucher
+  trail still lives in the Audit sheet either way.
+
+---
+
+## 0.6.4 — 2026-05-10
+**No weighted average. UnitPrice taken directly from a source row.**
+
+KS instruction: "never use weighted-average because the CFP system
+is automatically generated and it should match".
+
+The v0.6.3 implementation computed bucket UnitPrice as
+`round(Σamount / Σlitre, 2)` -- mathematically a weighted average,
+even though it equals every per-row value when the bucket is uniform
+(typical case). The v0.6.4 rule rejects the weighted-average
+abstraction entirely: the CFP system is deterministic, so per-row
+`amount / litre` within one (date, customer, station, fuel) bucket
+is guaranteed uniform. If rows disagree, the source is corrupt, not
+legitimately mixed.
+
+Behaviour change:
+- **Bucket UnitPrice** is now the FIRST source row's
+  `round(amount/litre, 2)` (first = source-PDF iteration order,
+  deterministic). No averaging of any kind.
+- **Check C** unchanged in formula -- compares every per-row
+  `round(amount/litre, 2)` to the bucket UnitPrice with RM 0.01
+  tolerance -- but the rationale is sharper: a disagreement is now
+  flagged as **corrupt source data**, not a "mid-day price change".
+  The previous SKILL.md guidance to "split the source data" or
+  "accept after review" is removed; the operator must investigate
+  the source.
+
+Impact on the v0.6.3 mixed-bucket smoke test:
+- Old (v0.6.3, weighted): UnitPrice = 3.99; Check C flagged ALL 3
+  rows because the weighted average matched none of them.
+- New (v0.6.4, first-row): UnitPrice = 3.97 (first row's price);
+  Check C flags only row z (4.05) -- the actual outlier.
+  Cleaner diagnosis.
+
+Files changed:
+- `compile_cfp.py`:
+  - `build_detail_rows()` -- main path now picks the first source
+    row's `unit_price_per_row`; explicit comment forbidding
+    weighted averages.
+  - Reconciliation header comment updated to reflect the
+    "no weighted average" rule and the "corrupt data, not price
+    change" framing.
+- `SKILL.md` -- 0.6.3 → 0.6.4; "Qty / UOM / UnitPrice rules"
+  rewritten (UnitPrice rule); Verification table Check C row
+  updated; Required AutoCount columns UnitPrice formula updated.
+- `VERSION` -- `0.6.3` → `0.6.4`.
+
+Non-breaking for clean data:
+- Every well-formed bucket where per-row prices are uniform
+  produces an IDENTICAL xlsx to v0.6.3. Only mixed buckets
+  diverge -- and they're now correctly framed as corrupt-source
+  errors, not legitimate variance.
+
+---
+
+## 0.6.3 — 2026-05-10
+**UnitPrice rule changed: per-source-row `amount/litre`, rounded 2 dp.**
+
+KS instruction: "for each individual row of data of the source, the
+amount divide by litre will be the unit price and that is to be used
+to be inserted unit_price" + "round it to 2 decimal point only".
+
+Behaviour changes:
+- **UnitPrice** is now `round(Σamount / Σlitre, 2)` using the
+  **unrounded** bucket sums (was: `round(Subtotal / Qty, 4)` using
+  the already-rounded values, which introduced sub-cent drift on
+  buckets with non-trivial fractional litres). When all source rows
+  in a bucket share a uniform pump price -- the typical case -- the
+  result equals every per-row `round(amount/litre, 2)` exactly.
+- **Qty** unchanged: `round(Σlitre, 2)` when source has litres,
+  `round(Σamount / RefPrice, 2)` otherwise.
+- **Subtotal** unchanged: `round(Σamount, 2)`, source truth.
+- **RefPrice fallback** (TK / BS PDFs with no litre column):
+  UnitPrice is now `round(RefPrice, 2)` directly (was: derived
+  via Subtotal / Qty). Mathematically the same when uniform but
+  free of compounding rounding.
+
+Verification changes:
+- **Check C replaced.** The old "Qty * UnitPrice ≈ Subtotal" check
+  was meaningful at 4 dp UnitPrice; at 2 dp the rounding error
+  scales with Qty and would routinely report ~0.40 RM drift on
+  normal buckets. AutoCount uses the explicit Subtotal column on
+  import, and Check B (pipeline conservation) already guarantees
+  no money is lost in aggregate, so the row-level Qty*UnitPrice
+  check no longer adds value.
+- **New Check C:** per-row UnitPrice uniformity. For every
+  source redemption with a litre value,
+  `|round(amount/litre, 2) - bucket.UnitPrice| <= 0.01`. FAIL
+  when a (date, customer, station, fuel) bucket contains rows with
+  materially different per-row unit prices -- typically a mid-day
+  pump-price change inside one bucket, which the operator must
+  resolve (split source data, override, or accept after review).
+  RefPrice-fallback buckets are exempt and reported in the OK note
+  as "skipped".
+
+Files changed:
+- `compile_cfp.py`:
+  - `Redemption` -- new `unit_price_per_row` property
+    (`amount / litre`, 2 dp, None if no litre).
+  - `ConsolidatedRow` -- new `source_redemptions` field tracking
+    every source row that contributed to the bucket.
+  - `consolidate()` -- appends to `source_redemptions`.
+  - `build_detail_rows()` -- new UnitPrice formula on both the
+    main path and the RefPrice fallback path.
+  - `build_reconciliation()` -- old Check C removed; new
+    per-row uniformity Check C added.
+  - Header comment for the Reconciliation block updated to
+    explain the C change and why the old check was retired.
+- `SKILL.md` -- 0.6.2 → 0.6.3; "Qty / UOM / UnitPrice rules"
+  section rewritten; Verification table Check C row updated;
+  "Required AutoCount columns" UnitPrice formula updated;
+  sample reconciliation console block updated.
+- `VERSION` -- `0.6.2` → `0.6.3`.
+
+Non-breaking for clean data:
+- A typical day where every bucket has a uniform per-row unit
+  price produces an xlsx with the SAME Subtotal, the SAME Qty,
+  and a UnitPrice that is identical to the v0.6.2 value (rounded
+  to 2 dp instead of 4 dp).
+
+---
+
+## 0.6.2 — 2026-05-10
+**Total-row handling rule locked: source Total feeds Check A, output never carries Total.**
+
+KS instruction: "the source will contain a total row at the last
+which is generated from the system, in the output remove the total
+because it will be imported into the autocount".
+
+The current PDF parser already discards `Total:` footer lines and the
+v0.6.1 reconciliation captures their value for Check A. The current
+`write_import` already produces only header + transaction rows in
+Master and Detail. This release **codifies** that behaviour as a
+locked rule and adds a defensive assertion so a future template
+change or new source format can't quietly violate it.
+
+Changes:
+- `compile_cfp.py` — `write_import` now calls
+  `_assert_no_total_row()` against both Master and Detail after
+  writing all rows. Any cell whose value is `Total` / `Grand Total` /
+  `Subtotal` / `Sub Total` (case-insensitive, trailing colon
+  tolerated) on rows >= 2 raises `RuntimeError` and aborts the save.
+  Helper sheets (Audit / Unmapped / Reconciliation) are unaffected
+  -- AutoCount reads only the first two sheets by position.
+- `SKILL.md` -- 0.6.1 -> 0.6.2; new "Total-row handling" subsection
+  spells out source-side capture (per format: PDF footer today, xlsx
+  trailing row when that source format lands) and the locked
+  output-side rule that the AutoCount import contains no Total row.
+- `VERSION` -- `0.6.1` -> `0.6.2`.
+
+Forward-looking:
+- When the xlsx-source code path lands (likely v0.7.0), the xlsx
+  parser will read the last data row, treat it as the Check A
+  control total, and drop it before the row enters `List[Redemption]`.
+
+Non-breaking:
+- Existing PDF-source flow produces identical xlsx output.
+
+---
+
+## 0.6.1 — 2026-05-10
+**Reconciliation harness added; corrects "bank deposit" misnomer.**
+
+KS request: "i need you to relook into the method you use and put in
+a verification in place in this skill".
+
+Re-walked the full PDF→xlsx pipeline and identified four leak points:
+parser drop, date-filter drop, customer-match drop (intentional but
+must be visible), and Qty×UnitPrice rounding drift. Three checks
+cover all four:
+
+- **Check A — per-PDF parse integrity.** The parser now captures each
+  PDF's `Total:` / `Grand Total:` footer instead of just filtering it
+  out. `parse_pdf` returns a `PDFParseResult(path, redemptions,
+  source_total, parsed_total)`. Reconciliation flags any PDF where
+  `|parsed_total − source_total| ≥ 0.01`. SKIP when the PDF carries
+  no Total line.
+- **Check B — pipeline conservation.**
+  `Σ filtered = Σ consolidated + Σ unmapped`. Catches anything
+  silently lost between filter and bucketed output.
+- **Check C — AutoCount math.** For every detail row that will be
+  written, `|Qty × UnitPrice − Subtotal| < 0.01`. Catches rounding
+  drift in Qty / UnitPrice derivation that would otherwise make
+  AutoCount disagree with our Subtotal.
+
+The reconciliation report is printed to console, written to a new
+`Reconciliation` sheet in the output xlsx, and any FAIL drives a
+**non-zero exit (code 2)** so an automated caller can't silently
+import a broken file.
+
+Behaviour changes:
+- Detail-row math (Qty / UnitPrice / Subtotal / Description) is now
+  computed by `build_detail_rows()` and reused by both `write_import`
+  and `build_reconciliation`. Decoupling guarantees the
+  reconciliation reads exactly what was written.
+- `parse_pdf` signature changed: `List[Redemption]` →
+  `PDFParseResult`. Callers within this script are updated;
+  external callers (none known) would need to read `.redemptions`.
+- `write_import` signature changed: now takes `detail_rows` and
+  optional `reconciliation`; deprecated `reference_prices` and
+  `doc_no_prefix` parameters since the math now happens upstream.
+
+Files changed:
+- `compile_cfp.py` — adds `TOTAL_LINE_RX`, `_extract_total`,
+  `PDFParseResult`, `DetailRow`, `build_detail_rows`, `ReconCheck`,
+  `RECON_TOLERANCE`, `build_reconciliation`, `print_reconciliation`;
+  refactors `parse_pdf` and `write_import`; `main()` now prints a
+  per-PDF Total comparison and a full reconciliation block, exits
+  with code 2 on any FAIL.
+- `SKILL.md` — 0.6.0 → 0.6.1; new "Verification / Reconciliation"
+  section; corrects the misleading "ties to the bank deposit"
+  line (now: "ties back to the per-PDF `Total:` footer line");
+  "How Claude should run it" updated with explicit FAIL-handling
+  step and instruction to surface the recon block before declaring
+  success.
+- `VERSION` — `0.6.0` → `0.6.1`.
+
+Non-breaking for the operator:
+- A clean run still produces the same xlsx as v0.6.0 (just with an
+  extra `Reconciliation` sheet).
+- DocNo numbering, totals, customer mapping, item codes, project
+  codes, reference prices unchanged.
+
+---
+
 ## 0.6.0 — 2026-05-08
 **Description trimmed to <=80 chars; UOM always LITER; Qty derived
 from reference prices when source has no litres; CSV-only output.**
