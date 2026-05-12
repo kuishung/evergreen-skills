@@ -3,14 +3,18 @@
 compile_cfp.py
 ==============
 
-Skill: cfp-entry  (version 0.6.6)
+Skill: cfp-entry  (version 0.7.0)
 
 CFP voucher-redemption -> AutoCount Sales Invoice import compiler.
 
 What it does
 ------------
-1. Reads one or more daily CFP / gvLedger PDFs (from any of the three
-   stations: TK = Tg Kapor, BS = Berkat Setia, BL = Bubul Lama).
+1. Reads one or more daily CFP / gvLedger source files. Two formats are
+   supported (per file extension):
+     * PDF  -- TK CFP REPORT, gvLedger BS, gvLedger BL (one file per
+               station, the original v0.1+ format).
+     * XLSX -- the unified gvLedger export (v0.7.0+) -- ONE file covering
+               all three stations, with a Station column on each row.
 2. Parses every voucher-redemption line.
 3. Looks up each company against customer_codes.csv (extracted from the
    AutoCount Debtor Listing) to attach the 300-XXXX account code.
@@ -48,9 +52,13 @@ matcher therefore:
 
 Dependencies
 ------------
+    pip install -r requirements.txt
+or:
     pip install pdfplumber openpyxl rapidfuzz
 
-(rapidfuzz is optional; if unavailable, a built-in fallback is used.)
+(rapidfuzz is optional; if unavailable, a built-in fallback is used.
+ pdfplumber is only needed when a PDF source is passed in -- xlsx-only
+ runs do not require it, but the import is unconditional today.)
 
 Author : Evergreen back-office automation
 Skill  : cfp-entry
@@ -67,14 +75,13 @@ from datetime import datetime
 from pathlib import Path
 from typing import Dict, Iterable, List, Optional, Tuple
 
-try:
-    import pdfplumber
-except ImportError:  # pragma: no cover
-    print("ERROR: pdfplumber is required. Run: pip install pdfplumber", file=sys.stderr)
-    raise
+# pdfplumber is imported lazily inside parse_pdf so an xlsx-only run
+# (the v0.7.0+ default) doesn't require it. openpyxl is always required
+# (input parser for xlsx sources + writer for the AutoCount import).
+pdfplumber = None  # set on first PDF parse; left None for xlsx-only runs
 
 try:
-    from openpyxl import load_workbook, Workbook
+    from openpyxl import load_workbook
 except ImportError:  # pragma: no cover
     print("ERROR: openpyxl is required. Run: pip install openpyxl", file=sys.stderr)
     raise
@@ -101,12 +108,23 @@ class Redemption:
     company_raw: str
     gas_type: str          # "Petrol" / "Diesel"
     amount: float          # absolute, positive
-    litre: Optional[float] # may be None for TK/BS reports that omit litres
+    litre: Optional[float] # see notes; may be filled in post-parse via RefPrice
     vehicle: str
     station: str           # "Buraqoil Tg Kapor" / "...Berkat Setia" / "...Bubul Lama"
     voucher: str
     redeem_dt: datetime
     receipt: str
+    # v0.7.0: True when `litre` was derived from RefPrice rather than read
+    # from the source. Three cases set this True:
+    #   * TK / BS PDF rows (the source format has no litre column at all);
+    #   * xlsx rows with a blank or zero Litre cell (per-row gap);
+    #   * any future source where per-row litres are missing.
+    # Set in `derive_missing_litres()` which runs once after all sources
+    # are parsed. Affects: unit_price_per_row (returns None for estimated
+    # rows so Check C exempts them); FurtherDescription voucher line
+    # (shows "RM X.XX" instead of "X.XXL" -- never report a derived
+    # litre as if it were source truth); Description suffix ("est" / "n est").
+    litre_estimated: bool = False
 
     @property
     def date(self) -> str:
@@ -115,11 +133,15 @@ class Redemption:
     @property
     def unit_price_per_row(self) -> Optional[float]:
         """v0.6.3: per-source-row unit price = amount / litre, rounded to 2 dp.
-        Returns None when the source row has no litre value (TK/BS PDFs).
+        Returns None when the source row has no usable litre value -- either
+        because the source format omits litres entirely (TK/BS PDFs), the
+        source row has a blank/zero litre (xlsx gap), OR the litre was
+        derived from RefPrice (v0.7.0 -- in that case amount/litre would
+        just give back the RefPrice and the check would be circular).
         This is the canonical source-of-truth unit price for the new
         UnitPrice rule -- bucket UnitPrice must equal every per-row value
         within the reconciliation tolerance."""
-        if self.litre is None or self.litre <= 0:
+        if self.litre is None or self.litre <= 0 or self.litre_estimated:
             return None
         return round(self.amount / self.litre, 2)
 
@@ -302,11 +324,16 @@ TOTAL_LINE_RX = re.compile(
 
 
 @dataclass
-class PDFParseResult:
-    """v0.6.1: parser output enriched with the source PDF's own control total."""
+class SourceParseResult:
+    """Parser output enriched with the source's own control total.
+
+    v0.6.1: introduced as PDFParseResult for the per-PDF Total: footer.
+    v0.7.0: renamed -- now also covers the xlsx-source path, which carries
+    the same control number as a 'Total: -36,848.03' string in the last
+    data row of the sheet."""
     path: Path
     redemptions: List["Redemption"]
-    source_total: Optional[float]  # value from the PDF's "Total:" footer line, abs-valued
+    source_total: Optional[float]  # value from the source's Total footer, abs-valued
     parsed_total: float            # sum of parsed Redemption.amount
 
 
@@ -323,7 +350,7 @@ def _extract_total(text: str) -> Optional[float]:
         return None
 
 
-def parse_pdf(path: Path) -> PDFParseResult:
+def parse_pdf(path: Path) -> SourceParseResult:
     """Extract redemptions AND the source 'Total:' line from a CFP/gvLedger PDF.
 
     The source total is captured from the LAST 'Total:' / 'Grand Total:' value
@@ -331,6 +358,18 @@ def parse_pdf(path: Path) -> PDFParseResult:
     page subtotals, the bottom-of-document grand total wins -- which is what
     we want for the per-PDF reconciliation check A.
     """
+    global pdfplumber
+    if pdfplumber is None:
+        try:
+            import pdfplumber as _pp  # lazy import (v0.7.0)
+            pdfplumber = _pp
+        except ImportError:
+            raise RuntimeError(
+                "pdfplumber is required to parse PDF sources. "
+                "Run: pip install pdfplumber  (or `pip install -r requirements.txt`). "
+                "For xlsx-only sources, pdfplumber is not needed."
+            )
+
     out: List[Redemption] = []
     source_total: Optional[float] = None
 
@@ -365,7 +404,7 @@ def parse_pdf(path: Path) -> PDFParseResult:
                         out.append(rec)
 
     parsed_total = round(sum(r.amount for r in out), 2)
-    return PDFParseResult(path=path, redemptions=out,
+    return SourceParseResult(path=path, redemptions=out,
                           source_total=source_total, parsed_total=parsed_total)
 
 
@@ -441,6 +480,244 @@ def _line_to_redemption(line: str) -> Optional[Redemption]:
         redeem_dt=datetime.strptime(m_dt.group(), "%Y-%m-%d %H:%M:%S"),
         receipt="",
     )
+
+
+# ---------------------------------------------------------------------------
+# XLSX parsing  (v0.7.0)
+# ---------------------------------------------------------------------------
+#
+# Unified gvLedger export: ONE sheet, ONE file covering all three stations.
+# Sample shape (header row 1, data rows 2..N, Total row at N+1):
+#
+#   Company | Type | Amount | Gas | Litre | Vehicle | Station | Voucher | Redeem Date | Receipt
+#   HIJAU MAJU JUTA SDN BHD | Refuel | -322.50 | Diesel | -150 | SYJ719 |
+#       Buraqoil Berkat Setia | 260509-08-3V2IA | <serial> | 32247
+#   ... 55 more redemption rows ...
+#                       | Total: -36,848.03 |
+#
+# Sign convention observed in the source: Amount always negative (it's a
+# debit from the voucher balance); Litre is mostly negative but Bubul Lama
+# rows appear positive -- both are quantities, so we abs() them. Some rows
+# carry Litre = 0 (system gap); those get derived via RefPrice in
+# derive_missing_litres() with litre_estimated=True so the audit trail
+# stays honest.
+
+XLSX_COLUMN_ALIASES: Dict[str, List[str]] = {
+    "company":  ["company"],
+    "type":     ["type"],
+    "amount":   ["amount"],
+    "gas":      ["gas", "fuel", "product"],
+    "litre":    ["litre", "liter", "litres", "liters"],
+    "vehicle":  ["vehicle", "plate", "vehicleno"],
+    "station":  ["station", "outlet"],
+    "voucher":  ["voucher", "voucherno", "vouchercode"],
+    "date":     ["redeemdate", "redeem date", "date", "datetime"],
+    "receipt":  ["receipt", "receiptno"],
+}
+
+
+def _coerce_datetime(v) -> Optional[datetime]:
+    """Best-effort: accept native datetime, Excel serial, or string."""
+    if v is None or v == "":
+        return None
+    if isinstance(v, datetime):
+        return v
+    if isinstance(v, (int, float)):
+        # Excel serial date (1900 system; openpyxl handles 1904 itself
+        # when wb.epoch is set, but we read data_only and just shift).
+        from datetime import timedelta
+        return datetime(1899, 12, 30) + timedelta(days=float(v))
+    if isinstance(v, str):
+        s = v.strip()
+        for fmt in ("%Y-%m-%d %H:%M:%S", "%Y-%m-%d", "%d/%m/%Y %H:%M:%S",
+                    "%d/%m/%Y", "%m/%d/%Y %H:%M:%S", "%m/%d/%Y"):
+            try:
+                return datetime.strptime(s, fmt)
+            except ValueError:
+                continue
+    return None
+
+
+def _xlsx_normalize_station(s: str) -> str:
+    """Source uses 'Buraqoil Tg Kapor' / 'Buraqoil Berkat Setia' /
+    'Buraqoil Bubul Lama' verbatim -- matches STATION_NAME_TO_KEY keys."""
+    return re.sub(r"\s+", " ", s).strip()
+
+
+def parse_xlsx(path: Path) -> SourceParseResult:
+    """v0.7.0: parse the unified gvLedger xlsx (one sheet, all stations).
+
+    Returns SourceParseResult with redemptions and the source's Total
+    footer for Check A. Rows with blank/zero Litre come out with
+    `litre=None` -- derive_missing_litres() will fill them in after all
+    sources are parsed (so we don't need RefPrices at parse time).
+    """
+    wb = load_workbook(str(path), data_only=True)
+    ws = wb[wb.sheetnames[0]]
+
+    # Map header row -> column index (1-based)
+    header_to_col: Dict[str, int] = {}
+    for col in range(1, ws.max_column + 1):
+        v = ws.cell(row=1, column=col).value
+        if v is not None:
+            key = re.sub(r"\s+", " ", str(v).strip().lower())
+            header_to_col[key] = col
+            header_to_col[key.replace(" ", "")] = col  # also space-stripped
+
+    def col_for(canonical: str) -> Optional[int]:
+        for alias in XLSX_COLUMN_ALIASES[canonical]:
+            if alias in header_to_col:
+                return header_to_col[alias]
+        return None
+
+    c_company = col_for("company")
+    c_amount  = col_for("amount")
+    c_gas     = col_for("gas")
+    c_litre   = col_for("litre")
+    c_vehicle = col_for("vehicle")
+    c_station = col_for("station")
+    c_voucher = col_for("voucher")
+    c_date    = col_for("date")
+    c_receipt = col_for("receipt")
+
+    missing = [k for k, c in [
+        ("Company", c_company), ("Amount", c_amount), ("Gas", c_gas),
+        ("Station", c_station), ("Voucher", c_voucher),
+        ("Redeem Date", c_date),
+    ] if c is None]
+    if missing:
+        raise ValueError(
+            f"xlsx {path.name} is missing required column(s): {missing}. "
+            f"Headers found: {sorted(header_to_col.keys())[:20]}..."
+        )
+
+    redemptions: List[Redemption] = []
+    source_total: Optional[float] = None
+
+    for row in ws.iter_rows(min_row=2, values_only=False):
+        # Detect a Total row anywhere in the row (the sample has it as a
+        # single 'Total: -36,848.03' string in the Amount cell). We also
+        # capture standalone 'Total' / 'Grand Total' label + adjacent
+        # number layouts.
+        row_total_seen = False
+        for cell in row:
+            v = cell.value
+            if v is None:
+                continue
+            s = str(v).strip()
+            if not s:
+                continue
+            if "total" in s.lower():
+                t = _extract_total(s)
+                if t is not None:
+                    source_total = t  # last-seen wins
+                    row_total_seen = True
+                    break
+        if row_total_seen:
+            continue
+
+        def gv(c: Optional[int]):
+            if c is None:
+                return None
+            return row[c - 1].value
+
+        company = gv(c_company)
+        if company is None or not str(company).strip():
+            continue
+        company = str(company).strip()
+
+        try:
+            amount = abs(float(gv(c_amount)))
+        except (TypeError, ValueError):
+            continue
+        if amount <= 0:
+            continue
+
+        gas_raw = gv(c_gas)
+        gas = str(gas_raw).strip().title() if gas_raw else ""
+        if gas not in ("Petrol", "Diesel"):
+            continue
+
+        litre_raw = gv(c_litre)
+        litre: Optional[float]
+        try:
+            litre_val = float(litre_raw) if litre_raw not in (None, "") else 0.0
+        except (TypeError, ValueError):
+            litre_val = 0.0
+        litre = abs(litre_val) if litre_val != 0 else None  # 0 / missing -> derive later
+
+        vehicle = str(gv(c_vehicle) or "").strip()
+        station = _xlsx_normalize_station(str(gv(c_station) or ""))
+        voucher = str(gv(c_voucher) or "").strip()
+        receipt = str(gv(c_receipt) or "").strip()
+        redeem_dt = _coerce_datetime(gv(c_date))
+        if redeem_dt is None:
+            continue
+
+        redemptions.append(Redemption(
+            company_raw=company,
+            gas_type=gas,
+            amount=amount,
+            litre=litre,
+            vehicle=vehicle,
+            station=station,
+            voucher=voucher,
+            redeem_dt=redeem_dt,
+            receipt=receipt,
+        ))
+
+    parsed_total = round(sum(r.amount for r in redemptions), 2)
+    return SourceParseResult(path=path, redemptions=redemptions,
+                             source_total=source_total, parsed_total=parsed_total)
+
+
+def parse_source(path: Path) -> SourceParseResult:
+    """v0.7.0: dispatch to PDF or xlsx parser by file extension.
+
+    Both return the same SourceParseResult shape, so callers don't
+    need to care which format they received."""
+    ext = path.suffix.lower()
+    if ext == ".pdf":
+        return parse_pdf(path)
+    if ext in (".xlsx", ".xlsm"):
+        return parse_xlsx(path)
+    raise ValueError(
+        f"Unsupported source format: {ext} (path: {path}). "
+        f"Supported: .pdf, .xlsx, .xlsm"
+    )
+
+
+def derive_missing_litres(redemptions: List[Redemption],
+                          reference_prices: Dict[Tuple[str, str], float]) -> None:
+    """v0.7.0: per-row Litre fallback using reference_prices.csv.
+
+    Runs once after all sources are parsed. For every redemption with
+    `litre is None or litre <= 0`, derives `litre = amount / RefPrice`
+    and sets `litre_estimated = True`. RefPrice is looked up by
+    (station_key, gas_type); if missing, the litre is left as None and
+    the row will land in build_detail_rows with `est=True` but qty=0.
+
+    This unifies three previously-separate cases:
+      * TK / BS PDFs (entire source lacks a Litre column)
+      * xlsx rows with a blank / zero Litre cell (per-row gap)
+      * BL gvLedger PDFs (Litre column present; this function is a no-op)
+
+    Behaviour for an all-litres-present bucket is unchanged. For a TK PDF
+    bucket the per-row math is numerically identical to the v0.6.6
+    bucket-level fallback (sum of (amount_i / RefPrice) == sum(amount) /
+    RefPrice). For a mixed xlsx bucket -- some rows with litres, some
+    without -- this is the first version that handles them correctly.
+    Mutates `redemptions` in place.
+    """
+    for r in redemptions:
+        if r.litre is not None and r.litre > 0:
+            continue
+        stn_key = STATION_NAME_TO_KEY.get(r.station, "")
+        rp = reference_prices.get((stn_key, r.gas_type), 0.0)
+        if rp > 0:
+            r.litre = r.amount / rp
+            r.litre_estimated = True
+        # else: leave litre=None; downstream will mark qty=0 and est=True
 
 
 # ---------------------------------------------------------------------------
@@ -624,24 +901,41 @@ class DetailRow:
     qty: float
     unit_price: float
     subtotal: float
-    qty_estimated: bool  # True when Qty was derived from RefPrice (no source litres)
+    # v0.7.0: True iff EVERY source row in the bucket was estimated (full
+    # RefPrice fallback). For a mixed bucket (some source litres, some
+    # derived) this is False; use `est_count` on the DetailRow or check
+    # any(r.litre_estimated for r in cr.source_redemptions) for finer
+    # granularity. Kept for backwards-compat with anything that read
+    # this flag from the Audit sheet / programmatic callers.
+    qty_estimated: bool
+    # v0.7.0: count of source rows in this bucket that had Litre derived
+    # via RefPrice. 0 = clean source-truth; equal to voucher_count =
+    # full estimation; in between = mixed (xlsx-only case).
+    est_count: int = 0
 
 
 def _format_voucher_line(r: Redemption) -> str:
-    """v0.6.6: one voucher line for the FurtherDescription audit trail.
+    """v0.6.6+: one voucher line for the FurtherDescription audit trail.
 
     Format: '<voucher> - <fuel> (<qty>)' where <qty> is verbatim from
-    the source -- never derived:
-      * BL gvLedger (litre column present) -> '25.19L'
-      * TK CFP REPORT / BS gvLedger (no litre column) -> 'RM 100.00'
+    the source -- NEVER derived:
+      * Source had a real litre (BL gvLedger row, xlsx row with Litre>0)
+        -> '25.19L'
+      * Source had no litre or a zero litre, so the value was estimated
+        via RefPrice in derive_missing_litres()
+        -> 'RM 100.00'    (per-row amount, NOT the derived litre)
 
-    Honest reporting: if the source didn't carry per-row litres, we
-    show the per-row amount instead of an estimated litre count.
+    v0.7.0 honesty rule: after derive_missing_litres() runs, every
+    redemption has a numeric `litre`. The old check (`r.litre is not None
+    and r.litre > 0`) would silently print a derived value as if it were
+    source-truth. The new check uses `litre_estimated` so estimated rows
+    keep showing the original RM amount -- aligning with the v0.6.6 docs
+    promise that <qty> is verbatim from the source.
     """
-    if r.litre is not None and r.litre > 0:
-        qty_text = f"{r.litre:.2f}L"
-    else:
+    if r.litre is None or r.litre <= 0 or r.litre_estimated:
         qty_text = f"RM {r.amount:.2f}"
+    else:
+        qty_text = f"{r.litre:.2f}L"
     return f"{r.voucher} - {r.gas_type} ({qty_text})"
 
 
@@ -715,31 +1009,57 @@ def build_detail_rows(rows: List[ConsolidatedRow],
         # if any row disagrees -- a disagreement means corrupt source
         # data, not a legitimate price change.
         #
-        # Implementation: take the FIRST source row's per-row price as
-        # the bucket UnitPrice. "First" = source-PDF iteration order,
-        # which is deterministic. Any other source row in the bucket
-        # MUST match within RM 0.01 or Check C fails.
+        # v0.7.0: per-row Litre fallback. After derive_missing_litres()
+        # runs, every redemption has a numeric `litre`. The bucket may
+        # now be:
+        #   * all-source  -- every row's litre came from the source
+        #                    (e.g. xlsx file with no Litre=0 rows, or a
+        #                    BL gvLedger PDF). UnitPrice = first source
+        #                    row's amount/litre.
+        #   * all-estimated -- every row had litre derived from RefPrice
+        #                    (TK / BS PDFs, or all-blank xlsx bucket).
+        #                    UnitPrice = round(RefPrice, 2) directly.
+        #   * mixed       -- xlsx bucket where some rows have litres and
+        #                    some don't. UnitPrice = first SOURCE row's
+        #                    amount/litre; Qty = sum of all litres
+        #                    (source + derived). Description gets a
+        #                    "(N vch, K est)" suffix to flag the mix.
+        # `est_count` is the number of estimated rows in the bucket;
+        # 0 = clean, == n = full estimation, in between = mixed.
+        source_priced_rows = [r for r in cr.source_redemptions
+                              if r.unit_price_per_row is not None]
+        est_count = sum(1 for r in cr.source_redemptions if r.litre_estimated)
+        # Qty: sum across all rows (source litres + derived litres).
+        # cr.total_litre is already this sum because consolidate() adds
+        # r.litre on every row, and derive_missing_litres() filled in
+        # the gaps before consolidate ran.
         if cr.total_litre and cr.total_litre > 0:
             qty = round(cr.total_litre, 2)
-            per_row_values = [r.unit_price_per_row
-                              for r in cr.source_redemptions
-                              if r.unit_price_per_row is not None]
-            unit_price = per_row_values[0] if per_row_values else 0.0
-            est = False
+        else:
+            qty = 0.0
+        # UnitPrice: prefer a source row's per-row price (preserves the
+        # v0.6.4 "never weighted average" rule). If the bucket is fully
+        # estimated, fall back to the RefPrice itself.
+        if source_priced_rows:
+            unit_price = source_priced_rows[0].unit_price_per_row or 0.0
         else:
             ref_price = reference_prices.get((cr.station_key, cr.gas_type), 0.0)
-            if ref_price > 0:
-                unit_price = round(ref_price, 2)
-                qty = round(cr.total_amount / ref_price, 2)
-            else:
-                unit_price = 0.0
-                qty = 0.0
-            est = True
+            unit_price = round(ref_price, 2) if ref_price > 0 else 0.0
         subtotal = round(cr.total_amount, 2)
 
-        # v0.6.0: short description, no voucher list (80-char cap).
+        # v0.6.0 / v0.7.0: short description, no voucher list (80-char cap).
+        #   no estimation         -> "Petrol @ ... (5 vch)"
+        #   fully estimated       -> "Petrol @ ... (5 vch est)"        [v0.6.0 form]
+        #   mixed estimation      -> "Petrol @ ... (5 vch, 2 est)"     [v0.7.0]
+        n = cr.voucher_count
+        if est_count == 0:
+            est_suffix = ""
+        elif est_count == n:
+            est_suffix = " est"
+        else:
+            est_suffix = f", {est_count} est"
         desc = (f"{cr.gas_type} @ {cr.station_full or cr.station_key} "
-                f"({cr.voucher_count} vch{' est' if est else ''})")[:80]
+                f"({n} vch{est_suffix})")[:80]
 
         # v0.6.6: FurtherDescription is now date-grouped voucher detail.
         # See _build_further_description() for format spec; cap raised
@@ -757,7 +1077,8 @@ def build_detail_rows(rows: List[ConsolidatedRow],
             qty=qty,
             unit_price=unit_price,
             subtotal=subtotal,
-            qty_estimated=est,
+            qty_estimated=(est_count == n),  # all-or-nothing flag (v0.6.0 semantic)
+            est_count=est_count,             # v0.7.0: granular count
         ))
     return out
 
@@ -833,14 +1154,20 @@ def write_import(template_path: Path,
     audit_ws = wb.create_sheet("Audit")
     audit_ws.append(["Date", "AccCode", "Customer", "Station", "Gas",
                      "ItemCode", "ProjectNo", "Amount", "Litre",
-                     "VoucherCount", "Vouchers", "Notes"])
+                     "VoucherCount", "EstCount", "Vouchers", "Notes"])
     for cr in rows:
+        # v0.7.0: EstCount surfaces per-row litre estimation in the audit
+        # trail. 0 = bucket is clean source-truth. == VoucherCount = full
+        # RefPrice fallback (TK / BS PDF, or all-blank xlsx bucket).
+        # In between = mixed xlsx bucket (some source litres, some derived).
+        est_count = sum(1 for r in cr.source_redemptions if r.litre_estimated)
         audit_ws.append([cr.doc_date, cr.acc_code, cr.company_name,
                          cr.station_full or cr.station_key, cr.gas_type,
                          stock_codes.get((cr.station_key, cr.gas_type), ""),
                          project_codes.get(cr.station_key, ""),
                          round(cr.total_amount, 2), round(cr.total_litre, 2),
-                         cr.voucher_count, cr.voucher_list, cr.notes])
+                         cr.voucher_count, est_count,
+                         cr.voucher_list, cr.notes])
 
     # Unmapped sheet
     if "Unmapped" in wb.sheetnames:
@@ -976,16 +1303,16 @@ def _check(name: str, expected: float, actual: float,
                       delta=delta, status=status, note=note)
 
 
-def build_reconciliation(pdf_results: List[PDFParseResult],
+def build_reconciliation(source_results: List[SourceParseResult],
                          filtered: List[Redemption],
                          consolidated: List[ConsolidatedRow],
                          unmapped: List[Redemption],
                          detail_rows: List[DetailRow]) -> List[ReconCheck]:
     checks: List[ReconCheck] = []
 
-    # --- Check A: per-PDF parse integrity ----------------------------------
-    for pr in pdf_results:
-        label = f"A. {pr.path.name}: PDF Total vs parsed sum"
+    # --- Check A: per-source parse integrity -------------------------------
+    for pr in source_results:
+        label = f"A. {pr.path.name}: source Total vs parsed sum"
         if pr.source_total is None:
             checks.append(ReconCheck(
                 name=label, expected=None, actual=pr.parsed_total,
@@ -1006,22 +1333,27 @@ def build_reconciliation(pdf_results: List[PDFParseResult],
         note=f"consolidated {consolidated_total:.2f} + unmapped {unmapped_total:.2f}",
     ))
 
-    # --- Check C: per-row UnitPrice uniformity (v0.6.3) --------------------
-    # For each detail row whose bucket has source litres, every contributing
-    # source redemption must have round(amount / litre, 2) within RM 0.01
-    # of the bucket's UnitPrice. RefPrice-fallback buckets are exempt
-    # (no per-row litres to compare against).
+    # --- Check C: per-row UnitPrice uniformity (v0.6.3, v0.7.0 updated) ----
+    # For every source row with a REAL (non-estimated) litre value, the
+    # bucket's UnitPrice must equal round(amount / litre, 2) within
+    # RM 0.01. Rows where the litre was derived via RefPrice in
+    # derive_missing_litres() are exempt -- their unit_price_per_row
+    # property returns None, so they're skipped naturally.
+    #
+    # v0.7.0 nuance: a mixed bucket (some source litres, some estimated)
+    # is checked only on the source-litre rows. The estimated rows are
+    # counted in the OK note for transparency, but they can't disagree
+    # by construction (amount / (amount/RefPrice) = RefPrice).
     bad: List[Tuple[str, str, float, float]] = []
     rows_checked = 0
-    rows_skipped_fallback = 0
+    rows_skipped_estimated = 0
     for d in detail_rows:
-        if d.qty_estimated:
-            rows_skipped_fallback += 1
-            continue  # RefPrice fallback path -- no per-row litres available
         for r in d.cr.source_redemptions:
             row_up = r.unit_price_per_row
             if row_up is None:
-                continue  # source row had no litre value
+                if r.litre_estimated:
+                    rows_skipped_estimated += 1
+                continue
             rows_checked += 1
             if abs(row_up - d.unit_price) > RECON_TOLERANCE:
                 bad.append((d.doc_no, r.voucher, row_up, d.unit_price))
@@ -1039,8 +1371,8 @@ def build_reconciliation(pdf_results: List[PDFParseResult],
         ))
     else:
         note_bits = [f"{rows_checked} source row(s) checked"]
-        if rows_skipped_fallback:
-            note_bits.append(f"{rows_skipped_fallback} RefPrice-fallback bucket(s) skipped")
+        if rows_skipped_estimated:
+            note_bits.append(f"{rows_skipped_estimated} estimated row(s) skipped")
         checks.append(ReconCheck(
             name="C. Per-row UnitPrice uniformity: amount/litre matches bucket UnitPrice",
             expected=0.0, actual=0.0, delta=0.0, status="OK",
@@ -1075,7 +1407,10 @@ def print_reconciliation(checks: List[ReconCheck]) -> None:
 
 def main(argv: Optional[List[str]] = None) -> int:
     p = argparse.ArgumentParser(description="Compile CFP voucher redemptions into an AutoCount sales import xlsx.")
-    p.add_argument("--reports", nargs="+", required=True, help="One or more CFP/gvLedger PDFs")
+    p.add_argument("--reports", nargs="+", required=True,
+                   help="One or more CFP/gvLedger source files (.pdf or .xlsx). "
+                        "v0.7.0+: a single unified gvLedger.xlsx covering all "
+                        "three stations is the recommended format.")
     p.add_argument("--date", default=None, help="Document date YYYY-MM-DD (auto-detect if omitted)")
     p.add_argument("--template", required=True, help="Path to AutoCount Default Sales.xlsx")
     p.add_argument("--customers", required=True, help="customer_codes.csv")
@@ -1103,15 +1438,19 @@ def main(argv: Optional[List[str]] = None) -> int:
     reference_prices = load_reference_prices(
         Path(args.reference_prices) if args.reference_prices else None)
 
-    pdf_results: List[PDFParseResult] = []
+    source_results: List[SourceParseResult] = []
     all_red: List[Redemption] = []
     for rp in args.reports:
         path = Path(rp)
         if not path.exists():
-            print(f"WARN: report not found: {rp}", file=sys.stderr)
+            print(f"WARN: source not found: {rp}", file=sys.stderr)
             continue
-        pr = parse_pdf(path)
-        pdf_results.append(pr)
+        try:
+            pr = parse_source(path)
+        except ValueError as e:
+            print(f"WARN: {e}", file=sys.stderr)
+            continue
+        source_results.append(pr)
         all_red.extend(pr.redemptions)
         if pr.source_total is None:
             print(f"  parsed {len(pr.redemptions):3d} rows  parsed_total={pr.parsed_total:>12.2f}  "
@@ -1125,6 +1464,20 @@ def main(argv: Optional[List[str]] = None) -> int:
     if args.date:
         all_red = [r for r in all_red if r.date == args.date]
         print(f"Filtered to {args.date}: {len(all_red)} rows")
+
+    # v0.7.0: post-parse Litre normalisation. Rows that came out of the
+    # parser without a usable litre (TK / BS PDF rows, xlsx rows with a
+    # blank / zero Litre cell) get litre derived from RefPrice and
+    # marked litre_estimated=True. Downstream code (consolidate,
+    # build_detail_rows, reconciliation) is then one path -- every row
+    # has a numeric litre, the estimated flag drives the cosmetic
+    # differences (description suffix, voucher line format,
+    # Check C exemption).
+    estimated_before = sum(1 for r in all_red if r.litre is None or r.litre <= 0)
+    derive_missing_litres(all_red, reference_prices)
+    if estimated_before:
+        print(f"Estimated litre via RefPrice for {estimated_before} row(s) "
+              f"(no source litre)")
 
     rows, unmapped = consolidate(all_red, matcher)
     print(f"\nConsolidated {len(rows)} customer-fuel rows; {len(unmapped)} unmapped rows.")
@@ -1140,7 +1493,7 @@ def main(argv: Optional[List[str]] = None) -> int:
 
     # v0.6.1: build + print reconciliation BEFORE writing the xlsx so the
     # operator sees totals even if the xlsx write fails for any reason.
-    recon = build_reconciliation(pdf_results, all_red, rows, unmapped, detail_rows)
+    recon = build_reconciliation(source_results, all_red, rows, unmapped, detail_rows)
     print_reconciliation(recon)
 
     write_import(

@@ -1,0 +1,18 @@
+# cfp-entry runtime dependencies
+#
+# pin-style: minimum-version. Cowork ships modern wheels for all three;
+# tighter pins are only worth adding if a future release breaks us.
+#
+# openpyxl    -- input parser for xlsx sources (v0.7.0+) AND the writer
+#                that produces the AutoCount Sales Invoice import xlsx.
+#                Required for every run.
+# pdfplumber  -- input parser for PDF sources (TK CFP REPORT, gvLedger
+#                BS / BL PDFs). Lazy-imported inside parse_pdf() so a
+#                xlsx-only run does NOT need pdfplumber installed.
+# rapidfuzz   -- fast fuzzy company-name matching against
+#                customer_codes.csv. Optional; if missing, the script
+#                falls back to a built-in Jaccard ratio (slower, less
+#                forgiving of name typos).
+openpyxl>=3.1
+pdfplumber>=0.10
+rapidfuzz>=3.0

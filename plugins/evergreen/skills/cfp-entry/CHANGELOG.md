@@ -13,6 +13,140 @@ When you make a change:
 
 ---
 
+## 0.7.0 — 2026-05-11
+**XLSX source format supported: unified gvLedger.xlsx (all stations in one file).**
+
+KS request: provided a sample `gvLedger.xlsx` (one sheet, 55 rows + Total
+footer, all three stations merged) and asked the skill to ingest it.
+The v0.6.2 changelog had anticipated xlsx ingestion as "likely v0.7.0";
+this release delivers it, with a tighter per-row Litre fallback rule
+than was originally sketched.
+
+Behaviour additions:
+- **New parser: `parse_xlsx(path)`** -- reads the unified gvLedger
+  format. Header row maps Company / Type / Amount / Gas / Litre /
+  Vehicle / Station / Voucher / Redeem Date / Receipt to internal
+  fields; alias map (`XLSX_COLUMN_ALIASES`) tolerates header drift
+  (e.g. `Liter` vs `Litre`, `RedeemDate` vs `Redeem Date`). Sign
+  convention: Amount always negative in source (debit from voucher
+  balance) -- the parser `abs()`-es. Litre is `abs()`-ed too;
+  blank or zero is treated as "missing" (left as None, filled in
+  by `derive_missing_litres()` later).
+- **New dispatcher: `parse_source(path)`** -- picks PDF or xlsx
+  parser by file extension. Callers in `main()` switched from
+  direct `parse_pdf` calls to `parse_source`.
+- **New post-parse pass: `derive_missing_litres(redemptions, ref_prices)`**
+  -- runs once after all sources are parsed. For every redemption
+  where the source litre is None or 0, derives
+  `litre = amount / RefPrice[(station, gas)]` and sets the new
+  per-row flag `litre_estimated = True`. Unifies three previously-
+  separate cases into one code path: TK / BS PDF rows (no litre
+  column at all), xlsx rows with a blank / zero Litre cell, and
+  BL gvLedger PDF rows (no-op -- litres already present).
+- **Per-row estimation flag on `Redemption`:** new field
+  `litre_estimated: bool = False`. Used by `unit_price_per_row`
+  (returns None for estimated rows so Check C exempts them);
+  by `_format_voucher_line` (estimated rows show `RM <amount>`
+  instead of `<litre>L` -- preserves the v0.6.6 "qty is verbatim
+  from source" promise); by `build_detail_rows` (description
+  suffix granularity).
+- **Mixed-bucket Description format (v0.7.0):**
+    no estimation         -> `Petrol @ ... (5 vch)`
+    fully estimated       -> `Petrol @ ... (5 vch est)`   [v0.6.0 form]
+    mixed (xlsx case)     -> `Petrol @ ... (5 vch, 2 est)` [v0.7.0]
+  The v0.6.0 "all-or-nothing" semantic is preserved for legacy
+  TK / BS PDF buckets; mixed-estimation buckets (xlsx-only case)
+  get the new granular form.
+- **`DetailRow.est_count`** -- new field carrying the per-bucket
+  estimated-row count. `qty_estimated` is retained for v0.6.0
+  back-compat (True iff every row in the bucket was estimated).
+- **Audit sheet gains `EstCount` column** -- per consolidated row,
+  the count of source rows whose Litre was derived. 0 = clean
+  source-truth, == VoucherCount = full RefPrice fallback,
+  in-between = mixed xlsx bucket.
+- **Reconciliation Check A relabelled** from "PDF Total" to "source
+  Total" -- the check is identical, the wording now covers xlsx too.
+- **Reconciliation Check C** -- semantic unchanged (per-row
+  amount/litre must match bucket UnitPrice within RM 0.01). The
+  exemption logic is now per-row (`r.litre_estimated`) instead of
+  per-bucket (`d.qty_estimated`), so a mixed xlsx bucket checks
+  the source-litre rows and exempts the derived ones. Note text
+  updated: "estimated row(s) skipped" instead of "RefPrice-fallback
+  bucket(s) skipped".
+- **`requirements.txt` added** -- `openpyxl>=3.1`, `pdfplumber>=0.10`,
+  `rapidfuzz>=3.0`. The pdfplumber import is now lazy (inside
+  `parse_pdf`), so an xlsx-only run in Cowork does not require it.
+- **`SourceParseResult`** -- internal rename of `PDFParseResult`
+  (it now covers xlsx too). Same shape; no external callers.
+- **`main()` logging** -- prints "Estimated litre via RefPrice for N
+  row(s) (no source litre)" when derive_missing_litres did anything,
+  so the operator sees how much of the day's Qty was derived.
+
+Behaviour preservation (non-breaking for PDF runs):
+- A TK + BS + BL three-PDF run produces the SAME numerical output as
+  v0.6.6: the per-row derivation `r.litre = amount / RefPrice`
+  followed by `qty = round(sum(r.litre), 2)` is numerically equivalent
+  to the v0.6.6 bucket-level `qty = round(total_amount / RefPrice, 2)`.
+- DocNo numbering, totals, customer mapping, ItemCode / ProjectNo,
+  Subtotal, UnitPrice rule (first source row's amount/litre, never
+  weighted average), UOM (LITER), Audit / Unmapped / Reconciliation
+  sheets -- ALL unchanged for clean source data.
+- Description on PDF buckets still gets the `(N vch)` or `(N vch est)`
+  form -- only mixed xlsx buckets get the new `, K est` form.
+
+Files changed:
+- `compile_cfp.py`:
+  - Module docstring: documents xlsx support; new "Dependencies"
+    note about lazy pdfplumber.
+  - `Redemption`: new `litre_estimated: bool = False`.
+  - `unit_price_per_row` property: returns None when
+    `litre_estimated` (Check C exemption).
+  - `PDFParseResult` -> renamed `SourceParseResult`.
+  - `parse_xlsx`, `_coerce_datetime`, `_xlsx_normalize_station`,
+    `XLSX_COLUMN_ALIASES`: NEW.
+  - `parse_source`: NEW dispatcher.
+  - `derive_missing_litres`: NEW post-parse normaliser.
+  - `parse_pdf`: now lazy-imports pdfplumber; raises
+    `RuntimeError` with install hint if unavailable.
+  - `_format_voucher_line`: honest reporting -- estimated rows
+    show RM amount, not derived litre.
+  - `build_detail_rows`: single-path logic (no more bucket-level
+    fallback branch); new mixed-bucket Description form;
+    `DetailRow.est_count` populated.
+  - `DetailRow`: new `est_count: int = 0`; `qty_estimated`
+    docstring updated to reflect the v0.7.0 semantic
+    (True iff every row was estimated).
+  - `build_reconciliation`: Check A label updated; Check C
+    exempts per-row via the `litre_estimated` flag rather than
+    per-bucket `qty_estimated`.
+  - `main()`: dispatches via `parse_source`; runs
+    `derive_missing_litres` after all sources are parsed;
+    prints the "Estimated litre via RefPrice for N row(s)" line;
+    `--reports` help text updated to mention xlsx support.
+  - `write_import`: Audit sheet header gains `EstCount`;
+    per-row estimated count populated.
+- `SKILL.md`: 0.6.6 -> 0.7.0; new "Source formats" section
+  (PDF + xlsx table, sign convention, per-row Litre fallback
+  rule); "Files in this skill" gains `requirements.txt`;
+  "Qty / UOM / UnitPrice rules" rewritten (v0.7.0 per-row
+  derivation rule); "Required AutoCount columns" Description
+  cell updated to mention mixed-bucket form; "How Claude
+  should run it" rewritten (xlsx is now the recommended source;
+  step 2 adds the `pip install -r requirements.txt` line);
+  "History of the consolidation rule" extended with v0.7 entry.
+- `CHANGELOG.md`: this entry.
+- `VERSION`: `0.6.6` -> `0.7.0`.
+- `requirements.txt`: NEW. Pins `openpyxl>=3.1 / pdfplumber>=0.10 /
+  rapidfuzz>=3.0`.
+
+Cowork note:
+- The user runs this skill in Cowork (Anthropic's Linux sandbox).
+  `pip install -r requirements.txt` covers everything; pdfplumber is
+  not required for xlsx-only runs but is included for the legacy
+  PDF flow. openpyxl is always required.
+
+---
+
 ## 0.6.6 — 2026-05-10
 **FurtherDescription format: date-grouped voucher trail with per-voucher fuel + qty.**
 

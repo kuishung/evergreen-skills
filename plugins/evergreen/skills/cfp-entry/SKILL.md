@@ -1,20 +1,22 @@
 ---
 name: cfp-entry
-description: Use this skill when the user (Evergreen petrol-station back-office) wants to convert daily Customer Fuel Pre-paid (CFP) voucher-redemption reports from any of the three Buraqoil stations — TK (Tg Kapor), BS (Berkat Setia), BL (Bubul Lama) — into an AutoCount Sales Invoice import xlsx ready for upload. Triggers include "compile CFP", "process voucher redemption", "make AutoCount import for today's vouchers", "CFP entry", "import CFP", or any task that takes one or more CFP / gvLedger PDFs and produces a sales-import file. The skill produces ONE Sales Invoice per unique (date, customer, station, product) and looks up the AutoCount 300-XXXX debtor code, the per-station fuel ItemCode, and the per-station ProjectNo from internal master files, then writes the result back into the user's own AutoCount Sales template column layout.
-version: 0.6.6
-updated: 2026-05-10
+description: Use this skill when the user (Evergreen petrol-station back-office) wants to convert daily Customer Fuel Pre-paid (CFP) voucher-redemption reports from any of the three Buraqoil stations — TK (Tg Kapor), BS (Berkat Setia), BL (Bubul Lama) — into an AutoCount Sales Invoice import xlsx ready for upload. Triggers include "compile CFP", "process voucher redemption", "make AutoCount import for today's vouchers", "CFP entry", "import CFP", or any task that takes one or more CFP / gvLedger PDFs or the unified gvLedger.xlsx and produces a sales-import file. The skill produces ONE Sales Invoice per unique (date, customer, station, product) and looks up the AutoCount 300-XXXX debtor code, the per-station fuel ItemCode, and the per-station ProjectNo from internal master files, then writes the result back into the user's own AutoCount Sales template column layout.
+version: 0.7.0
+updated: 2026-05-11
 ---
 
 # CFP Entry Skill
 
-**Version:** 0.6.6
-**Last updated:** 2026-05-10
+**Version:** 0.7.0
+**Last updated:** 2026-05-11
 **Owner:** Evergreen back-office (KS)
 
 ## What this skill does
 
-Given one or more daily voucher-redemption PDFs (TK CFP REPORT,
-gvLedger BS, gvLedger BL), the skill:
+Given one or more daily voucher-redemption source files — either the
+legacy per-station PDFs (TK CFP REPORT, gvLedger BS, gvLedger BL) **or**
+the unified `gvLedger.xlsx` (v0.7.0+), which covers all three stations
+in a single sheet — the skill:
 
 1. Parses every redemption line (company, fuel type, amount, litre,
    vehicle, station, voucher code, redeem datetime, receipt no.)
@@ -37,13 +39,46 @@ cfp-entry/
   SKILL.md               <- you are here
   CHANGELOG.md           <- version history
   VERSION                <- single-line current version
+  requirements.txt       <- pip dependencies (v0.7.0+, for Cowork / fresh envs)
   customer_codes.csv     <- AutoCount debtor master (300-XXXX code, name, voucher tag)
   stock_codes.csv        <- per-station fuel ItemCode (FUEL group, 6 codes)
   project_codes.csv      <- per-station ProjectNo (TK-FUEL / BS-FUEL / BL-FUEL)
-  reference_prices.csv   <- per-station per-fuel RM/L for Qty derivation when
-                            source PDF has no litre column (TK/BS reports)
+  reference_prices.csv   <- per-station per-fuel RM/L for Qty derivation
+                            (used for any row whose source litre is missing
+                            or zero — see "Source formats" below)
   compile_cfp.py         <- the parser/compiler script
 ```
+
+## Source formats (v0.7.0)
+
+The skill accepts two formats; the dispatcher picks one per file by
+extension.
+
+| Format | Coverage | Litre column | Total row | Typical usage |
+|---|---|---|---|---|
+| `.pdf` (TK CFP REPORT) | TK only | none | `Total:` footer | legacy per-station flow |
+| `.pdf` (gvLedger BS) | BS only | none | `Total:` footer | legacy per-station flow |
+| `.pdf` (gvLedger BL) | BL only | yes | `Total:` footer | legacy per-station flow |
+| **`.xlsx` (gvLedger)** | **all three** | yes (some rows blank/zero) | last data row carries `Total: <amount>` in a single cell | **v0.7.0+ recommended** |
+
+The xlsx is the unified gvLedger export — one file per day covering all
+three stations. Columns: `Company | Type | Amount | Gas | Litre |
+Vehicle | Station | Voucher | Redeem Date | Receipt`. Sign convention:
+Amount always negative (debit from voucher balance); Litre may be
+positive, negative, or zero — the parser `abs()`-es and treats zero as
+"missing".
+
+**Per-row Litre fallback (v0.7.0).** Any row whose source Litre is blank
+or zero gets `litre = amount / RefPrice` filled in by
+`derive_missing_litres()`, with `litre_estimated=True` on the row. The
+Description column shows `(N vch, K est)` when 0 < K < N (mixed
+bucket — xlsx-only case), `(N vch est)` when K == N (full fallback,
+e.g. TK PDF), and just `(N vch)` when no estimation happened. The
+FurtherDescription voucher line shows `RM <amount>` for estimated
+rows (verbatim from source) and `<litre>L` only when the litre came
+from the source. Reconciliation Check C exempts estimated rows
+(`unit_price_per_row` returns None for them, so the comparison is
+skipped naturally).
 
 ## AutoCount item / stock codes (locked in v0.2.0)
 
@@ -111,13 +146,16 @@ Petrol @ Buraqoil Tg Kapor (5 vch est)
 ```
 All under 80 chars.
 
-### Qty / UOM / UnitPrice rules (v0.6.3)
+### Qty / UOM / UnitPrice rules (v0.7.0)
 - **UOM** -- always `LITER`.
-- **Qty** -- if the source has a litre column on each row (BL `gvLedger`
-  today; future xlsx source for all stations), sum those litres and
-  round to 2 dp. If not (TK CFP REPORT, BS gvLedger), derive
-  `Qty = round(Subtotal / RefPrice, 2)` using
-  `reference_prices.csv[(station, gas)]`.
+- **Qty** -- after `derive_missing_litres()` runs, every redemption has
+  a numeric litre. The bucket's Qty is `round(sum(r.litre), 2)`.
+  Source-truth litres come from the file's Litre column when present
+  and non-zero (BL gvLedger PDF, xlsx rows with Litre>0); RefPrice-
+  derived litres come from `reference_prices.csv[(station, gas)]` for
+  rows where the source litre was missing or zero (TK / BS PDFs, xlsx
+  blank-litre rows). For a TK PDF bucket the per-row math is
+  numerically identical to the v0.6.6 bucket-level fallback.
 - **UnitPrice** (v0.6.4 RULE) -- taken **directly** from a source
   row's `round(amount / litre, 2)`. **NEVER** a weighted average.
   The CFP system is automatically generated, so per-row
@@ -205,10 +243,13 @@ into the import.
   import Description.
 - v0.5: + `DebtorName` on master; all six required fields populated.
 - v0.5.1: project codes locked (TK-FUEL / BS-FUEL / BL-FUEL).
-- **v0.6 (current): voucher list removed from Description (80-char
-  cap); UOM always `LITER`; Qty derived from `reference_prices.csv`
-  when the source PDF carries no litre column. Output: CSV only
-  (xlsx generation requires the Linux Python sandbox).**
+- v0.6: voucher list removed from Description (80-char cap); UOM always
+  `LITER`; Qty derived from `reference_prices.csv` when the source PDF
+  carries no litre column.
+- **v0.7 (current): xlsx source format supported -- unified
+  `gvLedger.xlsx` covering all three stations in one file. Per-row
+  Litre fallback (mixed buckets handled). `requirements.txt` shipped.
+  PDF support retained (lazy `pdfplumber` import).**
 
 ### FurtherDescription format (locked in v0.6.6)
 
@@ -267,7 +308,7 @@ sheet for reference.
 | Master | ExchangeRate  | `1`                                          |
 | Detail | DocNo         | links to master                              |
 | Detail | **ItemCode**  | `stock_codes.csv[(station, gas)]`            |
-| Detail | Description   | `<Gas> @ <Station> (<n> vch[ est])`, ≤ 80 chars |
+| Detail | Description   | `<Gas> @ <Station> (<n> vch[ est][ , <k> est])`, ≤ 80 chars — see v0.7.0 mixed-bucket form |
 | Detail | **FurtherDescription** | Date-grouped voucher trail (v0.6.6 format) — see "FurtherDescription format" below; ≤ 500 chars (truncated with `...` if exceeded) |
 | Detail | **UOM**       | always `LITER` (v0.6.0+)                     |
 | Detail | **Qty**       | sum of source litres, or `1` if no litre data|
@@ -285,41 +326,51 @@ silently rather than breaking the import.
 When the user asks to "compile CFP", "process voucher redemption",
 "make AutoCount import for [date]", or similar:
 
-1. **Confirm scope** -- which date, which station(s), where the daily
-   PDFs are. If multiple PDFs cover the same day, all three may be
-   passed in together; the script merges them into one combined import
-   file.
-2. **Locate the AutoCount Sales template** -- by default
+1. **Confirm scope** -- which date, which source file(s). The v0.7.0+
+   default is a single unified `gvLedger.xlsx` for the day. The
+   legacy three-PDF flow still works; pass any mix of PDFs and / or
+   xlsx files to `--reports`.
+2. **Install dependencies** (Cowork / fresh env / first run on a box):
+   ```
+   pip install -r requirements.txt
+   ```
+   For an xlsx-only run, `pdfplumber` is not strictly needed (it's
+   lazy-imported), so `pip install openpyxl rapidfuzz` is enough.
+3. **Locate the AutoCount Sales template** -- by default
    `D:\CLAUDE\Skill\CFP Entry\Autocount Import Template\Default Sales.xlsx`.
-3. **Stock codes are now locked** -- v0.2.0 picks per-station codes
-   automatically from `stock_codes.csv`. CLI flags `--petrol-code` /
-   `--diesel-code` are deprecated and ignored.
-4. **Project codes** -- if `project_codes.csv` has values, the script
-   fills the AutoCount `ProjectNo` column. Until v0.3.0 these are
-   blank.
+4. **Stock + project codes are locked** (v0.2.0 / v0.5.1) -- the script
+   picks per-station codes automatically from `stock_codes.csv` and
+   `project_codes.csv`. Deprecated CLI flags `--petrol-code` /
+   `--diesel-code` are silently ignored.
 5. **Run the script:**
    ```
    python compile_cfp.py \
-     --reports "<path-to-pdf-1>" "<path-to-pdf-2>" ... \
+     --reports "<path-to-source>.xlsx" \
      --date YYYY-MM-DD \
      --template "D:/CLAUDE/Skill/CFP Entry/Autocount Import Template/Default Sales.xlsx" \
-     --customers "D:/CLAUDE/Skill/CFP Entry/cfp-entry/customer_codes.csv" \
-     --stock-codes "D:/CLAUDE/Skill/CFP Entry/cfp-entry/stock_codes.csv" \
-     --project-codes "D:/CLAUDE/Skill/CFP Entry/cfp-entry/project_codes.csv" \
-     --out "D:/CLAUDE/Skill/CFP Entry/output/SalesImport_YYYY-MM-DD.xlsx"
+     --customers "<skill>/customer_codes.csv" \
+     --stock-codes "<skill>/stock_codes.csv" \
+     --project-codes "<skill>/project_codes.csv" \
+     --reference-prices "<skill>/reference_prices.csv" \
+     --out "<output>/SalesImport_YYYY-MM-DD.xlsx"
    ```
-5. **Review console output** -- the script prints, for each PDF: rows
-   parsed, parsed sum, source `Total:` value, and per-PDF `[OK]` /
-   `[MISMATCH]` marker. Then a `=== Reconciliation ===` block with
-   the three checks (A / B / C) defined in the **Verification /
-   Reconciliation** section above.
-6. **Surface findings to the user**:
+   For the legacy three-PDF flow, just pass all the PDFs to `--reports`
+   instead of one xlsx.
+6. **Review console output** -- the script prints, for each source file:
+   rows parsed, parsed sum, source `Total:` value, and per-file `[OK]` /
+   `[MISMATCH]` marker. v0.7.0 adds a line counting any rows whose
+   Litre was derived via RefPrice. Then a `=== Reconciliation ===`
+   block with the three checks (A / B / C) defined in the
+   **Verification / Reconciliation** section above.
+7. **Surface findings to the user**:
    - Any unmapped companies (decide: add to `customer_codes.csv`, or
      treat as one-off cash sale).
    - The reconciliation summary (`N FAIL, N OK, N SKIP`).
-7. **DO NOT proceed to import** if any reconciliation check is `FAIL`.
+   - The estimated-litre count (v0.7.0) if non-zero -- so the operator
+     knows how much of the day's Qty was derived rather than read.
+8. **DO NOT proceed to import** if any reconciliation check is `FAIL`.
    The script's exit code is 2 in that case; investigate, fix, re-run.
-8. **Hand the file to the user** with a `computer://` link only after
+9. **Hand the file to the user** with a `computer://` link only after
    reconciliation is clean.
 
 ## Customer master (`customer_codes.csv`)
